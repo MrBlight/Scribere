@@ -19,36 +19,36 @@ CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".scribere")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 SCORES_FILE = os.path.join(CONFIG_DIR, "scores.json")
 
-# Common Words Bank (Simple, frequent English words)
+# Common Words Bank
 COMMON_WORDS = [
     "the", "be", "to", "of", "and", "a", "in", "that", "have", "it",
-    "for", "not", "on", "with", "he", "as", "you", "do", "at", "this",
-    "but", "his", "by", "from", "they", "we", "say", "her", "she", "or",
-    "an", "will", "my", "one", "all", "would", "there", "their", "what", "so",
-    "up", "out", "if", "about", "who", "get", "which", "go", "me", "when",
-    "make", "can", "like", "time", "no", "just", "him", "know", "take", "people",
-    "into", "year", "your", "good", "some", "could", "them", "see", "other", "than",
-    "then", "now", "look", "only", "come", "its", "over", "think", "also", "back",
-    "after", "use", "two", "how", "our", "work", "first", "well", "way", "even",
-    "new", "want", "because", "any", "these", "give", "day", "most", "us", "is",
-    "house", "school", "fight", "although", "through", "water", "money", "world", "place", "group",
-    "hand", "high", "part", "child", "eye", "woman", "life", "down", "head", "stand",
+    "for", "not", "on", "with", "he", "as", "you", "do", "at", "this", "dog"
+    "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "dig", 
+    "an", "will", "my", "one", "all", "would", "there", "their", "what", "so", "wish",
+    "up", "out", "if", "about", "who", "get", "which", "go", "me", "when", "send", "folk", "musicial", "music", "rock", "pop", "jazz", "electronic"
+    "make", "can", "like", "time", "no", "just", "him", "know", "take", "people", "man",
+    "into", "year", "your", "good", "some", "could", "them", "see", "other", "than", "cost",
+    "then", "now", "look", "only", "come", "its", "over", "think", "also", "back", "talking",
+    "after", "use", "two", "how", "our", "work", "first", "well", "way", "even", "fly", "european", "african" "asian" "balkan",
+    "new", "want", "because", "any", "these", "give", "day", "most", "us", "is", "meme", "liquid",
+    "house", "school", "fight", "although", "through", "water", "money", "world", "place", "group", "tiny", "large",
+    "hand", "high", "part", "child", "eye", "woman", "life", "down", "head", "stand", "kid", "silly", "wise",
     "own", "page", "should", "country", "found", "answer", "study", "still", "learn", "parent",
-    "face", "friend", "mother", "city", "line", "near", "far", "door", "room", "floor",
-    "book", "letter", "word", "sentence", "paper", "idea", "question", "change", "order", "number",
-    "start", "end", "road", "map", "car", "bus", "train", "plane", "boat", "bike",
-    "dog", "cat", "bird", "fish", "tree", "flower", "grass", "sun", "moon", "star",
-    "sky", "cloud", "rain", "snow", "wind", "fire", "earth", "stone", "sand", "hill",
-    "river", "lake", "sea", "ocean", "bridge", "tower", "wall", "gate", "fence", "path",
-    "food", "bread", "milk", "egg", "meat", "fruit", "apple", "orange", "banana", "grape",
-    "cake", "sugar", "salt", "pepper", "coffee", "tea", "juice", "beer", "wine", "water",
-    "hot", "cold", "warm", "cool", "dry", "wet", "hard", "soft", "heavy", "light",
-    "fast", "slow", "old", "young", "big", "small", "long", "short", "wide", "narrow",
-    "thick", "thin", "deep", "shallow", "high", "low", "loud", "quiet", "bright", "dark",
-    "clean", "dirty", "full", "empty", "open", "closed", "safe", "dangerous", "easy", "hard",
+    "face", "friend", "mother", "father", "city", "line", "near", "far", "door", "room", "floor", "lost", 
+    "book", "letter", "word", "sentence", "paper", "idea", "question", "change", "order", "number", "half",
+    "start", "end", "road", "map", "car", "bus", "train", "plane", "boat", "bike", "however", "black", "white",
+    "dog", "cat", "bird", "fish", "tree", "flower", "grass", "sun", "moon", "star", "his", "her",
+    "sky", "cloud", "rain", "snow", "wind", "fire", "earth", "stone", "sand", "hill", "cat", "frog", 
+    "river", "lake", "sea", "ocean", "bridge", "tower", "wall", "gate", "fence", "path", "sour", "bitter", "sweet"
+    "food", "bread", "milk", "egg", "meat", "fruit", "apple", "orange", "banana", "grape", "computer",
+    "cake", "sugar", "salt", "pepper", "coffee", "tea", "juice", "beer", "wine", "water", "eat",
+    "hot", "cold", "warm", "cool", "dry", "wet", "hard", "soft", "heavy", "light", "great", "awesome",  
+    "fast", "slow", "old", "young", "big", "small", "long", "short", "wide", "narrow", "taste", "wrong", "right", 
+    "thick", "thin", "deep", "shallow", "high", "low", "loud", "quiet", "bright", "dark", "true", "truth", "false", "fake",
+    "clean", "dirty", "full", "empty", "open", "closed", "safe", "dangerous", "easy", "hard", "ice"
     "happy", "sad", "angry", "afraid", "tired", "hungry", "thirsty", "sick", "healthy", "strong",
-    "weak", "rich", "poor", "kind", "mean", "nice", "rude", "smart", "stupid", "funny",
-    "serious", "busy", "free", "early", "late", "soon", "never", "always", "often", "sometimes",
+    "weak", "rich", "poor", "kind", "mean", "nice", "rude", "smart", "stupid", "funny", "miller", "care", "game",  
+    "serious", "busy", "free", "early", "late", "soon", "never", "always", "often", "sometimes", "sound",
     "here", "there", "everywhere", "nowhere", "somewhere", "inside", "outside", "above", "below", "between",
     "before", "behind", "next", "last", "first", "second", "third", "fourth", "fifth", "tenth"
 ]
