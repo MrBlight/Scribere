@@ -1,567 +1,481 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Scribere - A Hyper-Minimalist Terminal Typing Tutor
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+Scribere - A hyper-minimalist terminal typing tutor.
+License: GNU GPL v3
+Author: MrBlight
 """
 
 import curses
+import time
 import random
 import sys
 import os
 import json
-import time
 import platform
-from pathlib import Path
-from datetime import datetime
 
-# --- CONFIGURATION & CONSTANTS ---
-VERSION = "1.0.0"
-CONFIG_DIR = Path.home() / ".scribere"
-CONFIG_FILE = CONFIG_DIR / "config.json"
-SCORES_FILE = CONFIG_DIR / "scores.json"
+# --- CONFIGURATION & DATA ---
 
-# Color Pairs
-C_NORMAL = 1
-C_CURSOR = 2
-C_TYPED_CORRECT = 3
-C_TYPED_ERROR = 4
-C_SUBTLE = 5
-C_BORDER = 6
-C_HIGHLIGHT = 7
+CONFIG_DIR = os.path.expanduser("~/.scribere")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+SCORES_FILE = os.path.join(CONFIG_DIR, "scores.json")
 
-# Quote Database: Diverse sources (Literature, Science, Art, Philosophy, Tech)
-# Format: {"text": "...", "author": "...", "topic": "...", "length_cat": "short|medium|long|longest"}
-RAW_QUOTES = [
-    # SHORT (5-15 words)
-    {"text": "Simplicity is the ultimate sophistication.", "author": "Leonardo da Vinci", "topic": "Art"},
-    {"text": "Know thyself.", "author": "Socrates", "topic": "Philosophy"},
-    {"text": "Nature does not hurry, yet everything is accomplished.", "author": "Lao Tzu", "topic": "Philosophy"},
-    {"text": "The unexamined life is not worth living.", "author": "Socrates", "topic": "Philosophy"},
-    {"text": "Less is more.", "author": "Mies van der Rohe", "topic": "Design"},
-    {"text": "Art is never finished, only abandoned.", "author": "Paul Valéry", "topic": "Art"},
-    {"text": "Code is like humor. When you have to explain it, it is bad.", "author": "Cory House", "topic": "Tech"},
-    {"text": "Fix the cause, not the symptom.", "author": "Steve Maguire", "topic": "Tech"},
-    {"text": "Truth is ever to be found in simplicity.", "author": "Isaac Newton", "topic": "Science"},
-    {"text": "Life is short, art is long.", "author": "Hippocrates", "topic": "Medicine"},
-    {"text": "Innovation distinguishes between a leader and a follower.", "author": "Steve Jobs", "topic": "Business"},
-    {"text": "Stay hungry, stay foolish.", "author": "Steve Jobs", "topic": "Life"},
-    {"text": "The only way to do great work is to love what you do.", "author": "Steve Jobs", "topic": "Work"},
-    {"text": "Simplicity is the soul of efficiency.", "author": "Austin Freeman", "topic": "Tech"},
-    {"text": "Make it work, make it right, make it fast.", "author": "Kent Beck", "topic": "Tech"},
-    
-    # MEDIUM (16-30 words)
-    {"text": "The best way to predict the future is to invent it.", "author": "Alan Kay", "topic": "Tech"},
-    {"text": "Any fool can write code that a computer can understand. Good programmers write code that humans can understand.", "author": "Martin Fowler", "topic": "Tech"},
-    {"text": "It is not that I am so smart, it is just that I stay with problems longer.", "author": "Albert Einstein", "topic": "Science"},
-    {"text": "Imagination is more important than knowledge. Knowledge is limited. Imagination encircles the world.", "author": "Albert Einstein", "topic": "Science"},
-    {"text": "The journey of a thousand miles begins with one step.", "author": "Lao Tzu", "topic": "Philosophy"},
-    {"text": "To be yourself in a world that is constantly trying to make you something else is the greatest accomplishment.", "author": "Ralph Waldo Emerson", "topic": "Life"},
-    {"text": "Success is not final, failure is not fatal: it is the courage to continue that counts.", "author": "Winston Churchill", "topic": "History"},
-    {"text": "Believe you can and you are halfway there.", "author": "Theodore Roosevelt", "topic": "Life"},
-    {"text": "Act as if what you do makes a difference. It does.", "author": "William James", "topic": "Psychology"},
-    {"text": "Never bend your head. Always hold it high. Look the world straight in the eye.", "author": "Helen Keller", "topic": "Life"},
-    {"text": "What we think, we become.", "author": "Buddha", "topic": "Philosophy"},
-    {"text": "Hardships often prepare ordinary people for an extraordinary destiny.", "author": "C.S. Lewis", "topic": "Literature"},
-    {"text": "Do not go where the path may lead, go instead where there is no path and leave a trail.", "author": "Ralph Waldo Emerson", "topic": "Life"},
-    {"text": "The only impossible journey is the one you never begin.", "author": "Tony Robbins", "topic": "Motivation"},
-    {"text": "In the middle of difficulty lies opportunity.", "author": "Albert Einstein", "topic": "Science"},
-    
-    # LONG (31-50 words)
-    {"text": "Programming is not about what you know; it is about what you can figure out when you don't know. The process of learning to program is a process of learning how to learn.", "author": "Chris Pine", "topic": "Tech"},
-    {"text": "The function of good software is to make the complex appear to be simple. Simplicity is the ultimate sophistication and the hallmark of genius.", "author": "Grady Booch", "topic": "Tech"},
-    {"text": "We are what we repeatedly do. Excellence, then, is not an act, but a habit. We must all suffer from one of two pains: the pain of discipline or the pain of regret.", "author": "Aristotle", "topic": "Philosophy"},
-    {"text": "It does not matter how slowly you go as long as you do not stop. Our greatest glory is not in never falling, but in rising every time we fall.", "author": "Confucius", "topic": "Philosophy"},
-    {"text": "The measure of intelligence is the ability to change. Everybody is a genius. But if you judge a fish by its ability to climb a tree, it will live its whole life believing that it is stupid.", "author": "Albert Einstein", "topic": "Science"},
-    {"text": "Creativity is intelligence having fun. The true sign of intelligence is not knowledge but imagination. Logic will get you from A to B. Imagination will take you everywhere.", "author": "Albert Einstein", "topic": "Science"},
-    {"text": "First, solve the problem. Then, write the code. Experience is the name everyone gives to their mistakes. The only real mistake is the one from which we learn nothing.", "author": "John Johnson", "topic": "Tech"},
-    {"text": "Talk is cheap. Show me the code. Programs must be written for people to read, and only incidentally for machines to execute.", "author": "Linus Torvalds", "topic": "Tech"},
-    {"text": "The saddest aspect of life right now is that science gathers knowledge faster than society gathers wisdom. Science without religion is lame, religion without science is blind.", "author": "Isaac Asimov", "topic": "Science"},
-    {"text": "I have not failed. I have just found ten thousand ways that won't work. Genius is one percent inspiration and ninety-nine percent perspiration.", "author": "Thomas Edison", "topic": "History"},
-    
-    # LONGEST (50+ words)
-    {"text": "Two things are infinite: the universe and human stupidity; and I am not sure about the universe. The important thing is not to stop questioning. Curiosity has its own reason for existing.", "author": "Albert Einstein", "topic": "Science"},
-    {"text": "Be yourself; everyone else is already taken. To live is the rarest thing in the world. Most people exist, that is all. Be who you are and say what you feel, because those who mind don't matter and those who matter don't mind.", "author": "Oscar Wilde", "topic": "Literature"},
-    {"text": "In three words I can sum up everything I have learned about life: it goes on. Life is what happens to us while we are making other plans. The purpose of our lives is to be happy.", "author": "Robert Frost", "topic": "Literature"},
-    {"text": "Clean code always looks like it was written by someone who cares. There is nothing quite so permanent as a quick fix. Getting good at programming is largely a matter of adopting good habits.", "author": "Robert C. Martin", "topic": "Tech"},
-    {"text": "The computer was born to solve problems that did not exist before. Software is eating the world. Technology is best when it brings people together. It has become appallingly obvious that our technology has exceeded our humanity.", "author": "Bill Gates", "topic": "Tech"},
-    {"text": "Education is the most powerful weapon which you can use to change the world. It always seems impossible until it is done. Freedom cannot be achieved unless women have been emancipated from all forms of oppression.", "author": "Nelson Mandela", "topic": "History"},
-    {"text": "If you want to lift yourself up, lift up someone else. I have learned that people will forget what you said, people will forget what you did, but people will never forget how you made them feel.", "author": "Booker T. Washington", "topic": "History"},
-    {"text": "The greatest glory in living lies not in never falling, but in rising every time we fall. The future belongs to those who believe in the beauty of their dreams. Tell me and I forget. Teach me and I remember. Involve me and I learn.", "author": "Eleanor Roosevelt", "topic": "History"},
+# Built-in Random Word List (500 common words) to ensure 'rand' mode works without external files
+RANDOM_WORDS = [
+    "the", "be", "of", "and", "a", "to", "in", "he", "have", "it", "that", "for", "they", "i", "with", "as", "not", "on", "she", "at", "by", "this", "we", "you", "do", "but", "from", "or", "which", "one", "would", "all", "will", "there", "say", "who", "make", "when", "can", "more", "if", "no", "man", "out", "other", "so", "what", "time", "up", "go", "about", "than", "into", "could", "state", "only", "new", "year", "some", "take", "come", "these", "know", "see", "use", "get", "like", "then", "first", "any", "work", "now", "may", "such", "give", "over", "think", "most", "even", "find", "day", "also", "after", "way", "many", "must", "look", "before", "great", "back", "through", "long", "where", "much", "should", "well", "people", "down", "own", "just", "because", "good", "each", "those", "feel", "seem", "how", "high", "too", "place", "little", "world", "very", "still", "nation", "hand", "old", "life", "tell", "write", "become", "here", "show", "house", "both", "between", "need", "mean", "call", "develop", "under", "last", "right", "move", "thing", "general", "school", "never", "same", "another", "begin", "while", "number", "part", "turn", "real", "leave", "might", "want", "point", "form", "off", "child", "few", "small", "since", "against", "ask", "late", "home", "interest", "large", "person", "end", "open", "public", "follow", "during", "present", "without", "again", "hold", "govern", "around", "possible", "head", "consider", "word", "program", "problem", "however", "lead", "system", "set", "order", "eye", "plan", "run", "keep", "face", "fact", "group", "play", "stand", "increase", "early", "course", "change", "help", "line", "city", "put", "close", "case", "force", "meet", "once", "water", "upon", "war", "build", "hear", "light", "unite", "live", "every", "country", "bring", "center", "let", "side", "try", "provide", "continue", "name", "certain", "power", "pay", "result", "question", "study", "woman", "member", "until", "far", "night", "always", "service", "away", "report", "something", "company", "week", "church", "toward", "start", "social", "room", "figure", "nature", "though", "young", "less", "enough", "almost", "read", "include", "president", "nothing", "yet", "better", "big", "boy", "cost", "business", "value", "second", "why", "clear", "expect", "family", "complete", "act", "sense", "mind", "experience", "art", "next", "near", "direct", "car", "law", "industry", "important", "girl", "god", "several", "matter", "usual", "rather", "per", "often", "kind", "among", "white", "reason", "action", "return", "foot", "care", "simple", "within", "love", "human", "along", "appear", "doctor", "believe", "speak", "active", "student", "month", "drive", "concern", "best", "door", "hope", "example", "inform", "body", "ever", "least", "probable", "understand", "reach", "effect", "different", "idea", "whole", "control", "condition", "field", "pass", "fall", "note", "special", "talk", "particular", "today", "measure", "walk", "teach", "low", "hour", "type", "carry", "rate", "remain", "full", "street", "easy", "although", "record", "sit", "determine", "level", "local", "sure", "receive", "thus", "moment", "spirit", "train", "college", "religion", "perhaps", "music", "grow", "free", "cause", "serve", "age", "book", "board", "recent", "sound", "office", "cut", "step", "class", "true", "history", "position", "above", "strong", "friend", "necessary", "add", "court", "deal", "tax", "support", "party", "whether", "earth", "union", "appear", "leader", "voice", "unit", "product", "black", "magic", "silver", "gold", "bronze", "victory", "success", "failure", "courage", "fear", "joy", "sadness", "anger", "peace", "war", "light", "dark", "sun", "moon", "star", "sky", "cloud", "rain", "snow", "wind", "fire", "water", "earth", "stone", "wood", "metal", "glass", "paper", "ink", "pen", "book", "page", "word", "letter", "sentence", "paragraph", "chapter", "story", "tale", "myth", "legend", "hero", "villain", "king", "queen", "prince", "princess", "knight", "dragon", "castle", "tower", "bridge", "road", "path", "street", "avenue", "lane", "alley", "park", "garden", "forest", "mountain", "hill", "valley", "river", "lake", "ocean", "sea", "beach", "island", "continent", "country", "city", "town", "village", "house", "home", "room", "door", "window", "wall", "floor", "ceiling", "roof", "stairs", "step", "ladder", "chair", "table", "desk", "bed", "sofa", "lamp", "light", "switch", "wire", "battery", "engine", "motor", "wheel", "tire", "car", "truck", "bus", "train", "plane", "ship", "boat", "bike", "cycle", "road", "track", "rail", "station", "airport", "port", "dock", "pier", "wharf", "market", "shop", "store", "mall", "bank", "office", "factory", "farm", "field", "barn", "stable", "zoo", "museum", "library", "school", "college", "university", "hospital", "clinic", "pharmacy", "church", "temple", "mosque", "synagogue", "shrine", "grave", "tomb", "monument", "statue", "fountain", "pool", "well", "spring", "stream", "brook", "creek", "pond", "swamp", "marsh", "desert", "jungle", "plain", "plateau", "cliff", "cave", "hole", "pit", "tunnel", "mine", "quarry", "dam", "dyke", "levee", "embankment", "fence", "gate", "hedge", "bush", "shrub", "tree", "leaf", "branch", "trunk", "root", "flower", "fruit", "seed", "nut", "berry", "grain", "corn", "wheat", "rice", "oat", "barley", "rye", "bean", "pea", "potato", "tomato", "onion", "garlic", "carrot", "cabbage", "lettuce", "spinach", "broccoli", "cauliflower", "cucumber", "pepper", "chili", "ginger", "turmeric", "cinnamon", "nutmeg", "clove", "vanilla", "sugar", "salt", "pepper", "vinegar", "oil", "butter", "cheese", "milk", "cream", "yogurt", "egg", "meat", "beef", "pork", "lamb", "chicken", "duck", "goose", "turkey", "fish", "salmon", "tuna", "cod", "shrimp", "crab", "lobster", "oyster", "clam", "mussel", "squid", "octopus", "jellyfish", "starfish", "seahorse", "whale", "dolphin", "shark", "ray", "eel", "snake", "lizard", "turtle", "frog", "toad", "newt", "salamander", "crocodile", "alligator", "hippo", "rhino", "elephant", "giraffe", "zebra", "lion", "tiger", "leopard", "cheetah", "jaguar", "panther", "bear", "wolf", "fox", "dog", "cat", "mouse", "rat", "rabbit", "hare", "squirrel", "chipmunk", "beaver", "otter", "seal", "walrus", "penguin", "ostrich", "eagle", "hawk", "owl", "raven", "crow", "pigeon", "dove", "sparrow", "robin", "bluebird", "cardinal", "parrot", "canary", "finch", "peacock", "flamingo", "swan", "goose", "duck", "pelican", "stork", "heron", "crane", "ibis", "spoonbill", "hummingbird", "woodpecker", "kingfisher", "bee", "wasp", "hornet", "ant", "termite", "fly", "mosquito", "gnat", "midge", "butterfly", "moth", "dragonfly", "damselfly", "beetle", "ladybug", "grasshopper", "cricket", "cockroach", "termite", "ant", "bee", "wasp", "spider", "scorpion", "centipede", "millipede", "worm", "leech", "snail", "slug", "shell", "coral", "sponge", "jellyfish", "anemone", "starfish", "urchin", "cucumber", "worm", "mollusk", "crustacean", "insect", "arachnid", "myriapod", "vertebrate", "invertebrate", "mammal", "bird", "reptile", "amphibian", "fish", "animal", "plant", "fungus", "bacteria", "virus", "cell", "tissue", "organ", "system", "organism", "species", "genus", "family", "order", "class", "phylum", "kingdom", "domain", "life", "death", "birth", "growth", "decay", "evolution", "adaptation", "mutation", "selection", "survival", "extinction", "fossil", "rock", "mineral", "crystal", "gem", "metal", "alloy", "compound", "mixture", "solution", "suspension", "colloid", "element", "atom", "molecule", "ion", "electron", "proton", "neutron", "nucleus", "shell", "orbital", "bond", "reaction", "equation", "formula", "structure", "property", "state", "phase", "change", "energy", "heat", "work", "power", "force", "motion", "speed", "velocity", "acceleration", "momentum", "impulse", "friction", "gravity", "mass", "weight", "density", "volume", "pressure", "temperature", "entropy", "enthalpy", "kinetic", "potential", "thermal", "chemical", "electrical", "magnetic", "nuclear", "radiation", "wave", "particle", "light", "sound", "color", "spectrum", "frequency", "wavelength", "amplitude", "phase", "interference", "diffraction", "refraction", "reflection", "absorption", "emission", "transmission", "conduction", "convection", "radiation", "insulation", "resistance", "conductance", "capacitance", "inductance", "impedance", "voltage", "current", "power", "energy", "charge", "field", "flux", "potential", "gradient", "divergence", "curl", "laplacian", "vector", "scalar", "tensor", "matrix", "determinant", "eigenvalue", "eigenvector", "space", "time", "dimension", "coordinate", "axis", "origin", "point", "line", "plane", "curve", "surface", "solid", "shape", "form", "size", "scale", "ratio", "proportion", "fraction", "decimal", "percent", "integer", "rational", "irrational", "real", "complex", "imaginary", "number", "digit", "numeral", "symbol", "sign", "operator", "function", "relation", "set", "subset", "union", "intersection", "complement", "difference", "product", "sum", "difference", "quotient", "remainder", "factor", "multiple", "prime", "composite", "even", "odd", "positive", "negative", "zero", "one", "infinity", "limit", "derivative", "integral", "series", "sequence", "progression", "pattern", "rule", "law", "theorem", "proof", "axiom", "postulate", "definition", "conjecture", "hypothesis", "theory", "model", "simulation", "experiment", "observation", "measurement", "data", "information", "knowledge", "wisdom", "truth", "falsehood", "belief", "opinion", "fact", "fiction", "reality", "illusion", "dream", "nightmare", "vision", "hallucination", "memory", "forgetfulness", "learning", "teaching", "education", "school", "university", "college", "academy", "institute", "laboratory", "library", "museum", "gallery", "theater", "cinema", "studio", "stage", "screen", "film", "movie", "video", "audio", "sound", "music", "song", "melody", "harmony", "rhythm", "beat", "tempo", "pitch", "tone", "timbre", "noise", "silence", "quiet", "loud", "soft", "hard", "smooth", "rough", "sharp", "dull", "bright", "dim", "clear", "cloudy", "transparent", "opaque", "translucent", "color", "red", "orange", "yellow", "green", "blue", "indigo", "violet", "purple", "pink", "brown", "black", "white", "gray", "gold", "silver", "bronze", "copper", "iron", "steel", "aluminum", "lead", "tin", "zinc", "nickel", "chromium", "titanium", "platinum", "mercury", "uranium", "plutonium", "radium", "carbon", "hydrogen", "oxygen", "nitrogen", "sulfur", "phosphorus", "chlorine", "fluorine", "bromine", "iodine", "helium", "neon", "argon", "krypton", "xenon", "radon", "lithium", "sodium", "potassium", "rubidium", "cesium", "francium", "beryllium", "magnesium", "calcium", "strontium", "barium", "radium", "boron", "aluminum", "gallium", "indium", "thallium", "silicon", "germanium", "tin", "lead", "arsenic", "antimony", "bismuth", "polonium", "astatine", "tennessine", "oganesson"
 ]
 
-def categorize_quotes():
-    """Categorize quotes by word count."""
-    categorized = {"short": [], "medium": [], "long": [], "longest": []}
-    for q in RAW_QUOTES:
-        words = len(q["text"].split())
-        if words <= 15:
-            q["length_cat"] = "short"
-            categorized["short"].append(q)
-        elif words <= 30:
-            q["length_cat"] = "medium"
-            categorized["medium"].append(q)
-        elif words <= 50:
-            q["length_cat"] = "long"
-            categorized["long"].append(q)
-        else:
-            q["length_cat"] = "longest"
-            categorized["longest"].append(q)
-    return categorized
-
-QUOTE_DB = categorize_quotes()
-
-# --- UTILS ---
-
-def ensure_config():
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    if not CONFIG_FILE.exists():
-        default_config = {
-            "theme": "default",
-            "minimal_stats": False,
-            "color_correct": 3, # Blue
-            "color_error": 4,   # Red
-            "cursor_color": 2   # Green
-        }
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(default_config, f, indent=2)
+# Curated Quotes Database (Categorized by length)
+QUOTES_DB = [
+    # Short (5-15 words)
+    {"text": "Simplicity is the ultimate sophistication.", "author": "Leonardo da Vinci", "topic": "Design"},
+    {"text": "Less is more.", "author": "Ludwig Mies van der Rohe", "topic": "Design"},
+    {"text": "Knowledge is power.", "author": "Francis Bacon", "topic": "Philosophy"},
+    {"text": "Time is money.", "author": "Benjamin Franklin", "topic": "Business"},
+    {"text": "Actions speak louder than words.", "author": "Proverb", "topic": "Wisdom"},
+    {"text": "Practice makes perfect.", "author": "Proverb", "topic": "Skill"},
+    {"text": "The early bird catches the worm.", "author": "Proverb", "topic": "Wisdom"},
+    {"text": "Beauty is in the eye of the beholder.", "author": "Proverb", "topic": "Art"},
+    {"text": "Necessity is the mother of invention.", "author": "Proverb", "topic": "Innovation"},
+    {"text": "A journey of a thousand miles begins with a single step.", "author": "Lao Tzu", "topic": "Philosophy"},
+    {"text": "To be or not to be.", "author": "William Shakespeare", "topic": "Literature"},
+    {"text": "All that glitters is not gold.", "author": "William Shakespeare", "topic": "Literature"},
+    {"text": "The truth will set you free.", "author": "Bible", "topic": "Religion"},
+    {"text": "Love thy neighbor as thyself.", "author": "Bible", "topic": "Religion"},
+    {"text": "I think therefore I am.", "author": "René Descartes", "topic": "Philosophy"},
+    {"text": "God is dead.", "author": "Friedrich Nietzsche", "topic": "Philosophy"},
+    {"text": "Life is suffering.", "author": "Buddha", "topic": "Philosophy"},
+    {"text": "Be the change you wish to see in the world.", "author": "Mahatma Gandhi", "topic": "Activism"},
+    {"text": "An eye for an eye leaves the whole world blind.", "author": "Mahatma Gandhi", "topic": "Peace"},
+    {"text": "In the middle of difficulty lies opportunity.", "author": "Albert Einstein", "topic": "Science"},
+    {"text": "Imagination is more important than knowledge.", "author": "Albert Einstein", "topic": "Science"},
+    {"text": "The unexamined life is not worth living.", "author": "Socrates", "topic": "Philosophy"},
+    {"text": "Know thyself.", "author": "Socrates", "topic": "Philosophy"},
+    {"text": "One cannot step twice in the same river.", "author": "Heraclitus", "topic": "Philosophy"},
+    {"text": "Man is the measure of all things.", "author": "Protagoras", "topic": "Philosophy"},
+    {"text": "The only thing I know is that I know nothing.", "author": "Socrates", "topic": "Philosophy"},
+    {"text": "We are what we repeatedly do.", "author": "Aristotle", "topic": "Philosophy"},
+    {"text": "Happiness depends upon ourselves.", "author": "Aristotle", "topic": "Philosophy"},
+    {"text": "The whole is greater than the sum of its parts.", "author": "Aristotle", "topic": "Philosophy"},
+    {"text": "Fortune favors the bold.", "author": "Virgil", "topic": "Literature"},
     
-    if not SCORES_FILE.exists():
-        with open(SCORES_FILE, 'w') as f:
-            json.dump([], f)
+    # Medium (16-30 words)
+    {"text": "It does not matter how slowly you go as long as you do not stop.", "author": "Confucius", "topic": "Wisdom"},
+    {"text": "Our lives begin to end the day we become silent about things that matter.", "author": "Martin Luther King Jr.", "topic": "Activism"},
+    {"text": "Do not dwell in the past, do not dream of the future, concentrate the mind on the present moment.", "author": "Buddha", "topic": "Mindfulness"},
+    {"text": "The best way to predict the future is to create it.", "author": "Peter Drucker", "topic": "Business"},
+    {"text": "Success is not final, failure is not fatal: it is the courage to continue that counts.", "author": "Winston Churchill", "topic": "Leadership"},
+    {"text": "Believe you can and you're halfway there.", "author": "Theodore Roosevelt", "topic": "Motivation"},
+    {"text": "The only limit to our realization of tomorrow will be our doubts of today.", "author": "Franklin D. Roosevelt", "topic": "Motivation"},
+    {"text": "It always seems impossible until it's done.", "author": "Nelson Mandela", "topic": "Perseverance"},
+    {"text": "Education is the most powerful weapon which you can use to change the world.", "author": "Nelson Mandela", "topic": "Education"},
+    {"text": "First they ignore you, then they laugh at you, then they fight you, then you win.", "author": "Mahatma Gandhi", "topic": "Activism"},
+    {"text": "Live as if you were to die tomorrow. Learn as if you were to live forever.", "author": "Mahatma Gandhi", "topic": "Life"},
+    {"text": "Happiness is not something ready made. It comes from your own actions.", "author": "Dalai Lama", "topic": "Happiness"},
+    {"text": "If you want to lift yourself up, lift up someone else.", "author": "Booker T. Washington", "topic": "Kindness"},
+    {"text": "I have not failed. I've just found 10,000 ways that won't work.", "author": "Thomas Edison", "topic": "Innovation"},
+    {"text": "Genius is one percent inspiration and ninety-nine percent perspiration.", "author": "Thomas Edison", "topic": "Work"},
+    {"text": "Logic will get you from A to B. Imagination will take you everywhere.", "author": "Albert Einstein", "topic": "Creativity"},
+    {"text": "Try not to become a man of success. Rather become a man of value.", "author": "Albert Einstein", "topic": "Values"},
+    {"text": "Look deep into nature, and then you will understand everything better.", "author": "Albert Einstein", "topic": "Nature"},
+    {"text": "The important thing is not to stop questioning. Curiosity has its own reason for existing.", "author": "Albert Einstein", "topic": "Curiosity"},
+    {"text": "Anyone who has never made a mistake has never tried anything new.", "author": "Albert Einstein", "topic": "Learning"},
+    {"text": "Two things are infinite: the universe and human stupidity; and I'm not sure about the universe.", "author": "Albert Einstein", "topic": "Humor"},
+    {"text": "Life is like riding a bicycle. To keep your balance, you must keep moving.", "author": "Albert Einstein", "topic": "Life"},
+    {"text": "The measure of intelligence is the ability to change.", "author": "Albert Einstein", "topic": "Intelligence"},
+    {"text": "Weakness of attitude becomes weakness of character.", "author": "Albert Einstein", "topic": "Character"},
+    {"text": "A person who never made a mistake never tried anything new.", "author": "Albert Einstein", "topic": "Growth"},
+    {"text": "Strive not to be a success, but rather to be of value.", "author": "Albert Einstein", "topic": "Purpose"},
+    {"text": "Great spirits have always encountered violent opposition from mediocre minds.", "author": "Albert Einstein", "topic": "Excellence"},
+    {"text": "Peace cannot be kept by force; it can only be achieved by understanding.", "author": "Albert Einstein", "topic": "Peace"},
+    {"text": "In the midst of winter, I found there was, within me, an invincible summer.", "author": "Albert Camus", "topic": "Resilience"},
+    {"text": "The only way to deal with an unfree world is to become so absolutely free that your very existence is an act of rebellion.", "author": "Albert Camus", "topic": "Freedom"},
 
-def load_scores():
-    try:
-        with open(SCORE_FILE := CONFIG_DIR / "scores.json", 'r') as f:
+    # Long (31-50 words)
+    {"text": "Three passions, simple but overwhelmingly strong, have governed my life: the longing for love, the search for knowledge, and unbearable pity for the suffering of mankind.", "author": "Bertrand Russell", "topic": "Life"},
+    {"text": "I am enough of an artist to draw freely upon my imagination. Imagination is more important than knowledge. Knowledge is limited. Imagination encircles the world.", "author": "Albert Einstein", "topic": "Creativity"},
+    {"text": "It is our attitude at the beginning of a difficult task which, more than anything else, will affect its successful outcome.", "author": "William James", "topic": "Psychology"},
+    {"text": "The greatest glory in living lies not in never falling, but in rising every time we fall.", "author": "Nelson Mandela", "topic": "Resilience"},
+    {"text": "In three words I can sum up everything I've learned about life: it goes on.", "author": "Robert Frost", "topic": "Life"},
+    {"text": "If you judge people, you have no time to love them.", "author": "Mother Teresa", "topic": "Love"},
+    {"text": "Not all those who wander are lost.", "author": "J.R.R. Tolkien", "topic": "Literature"},
+    {"text": "There is some good in this world, and it's worth fighting for.", "author": "J.R.R. Tolkien", "topic": "Hope"},
+    {"text": "All we have to decide is what to do with the time that is given us.", "author": "J.R.R. Tolkien", "topic": "Time"},
+    {"text": "Even the darkest night will end and the sun will rise.", "author": "Victor Hugo", "topic": "Hope"},
+    {"text": "To love another person is to see the face of God.", "author": "Victor Hugo", "topic": "Love"},
+    {"text": "Life is the flower for which love is the honey.", "author": "Victor Hugo", "topic": "Love"},
+    {"text": "Whatever you are, be a good one.", "author": "Abraham Lincoln", "topic": "Character"},
+    {"text": "A house divided against itself cannot stand.", "author": "Abraham Lincoln", "topic": "Unity"},
+    {"text": "Government of the people, by the people, for the people, shall not perish from the earth.", "author": "Abraham Lincoln", "topic": "Democracy"},
+    {"text": "Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal.", "author": "Abraham Lincoln", "topic": "History"},
+    {"text": "The best revenge is massive success.", "author": "Frank Sinatra", "topic": "Success"},
+    {"text": "I have a dream that one day this nation will rise up and live out the true meaning of its creed.", "author": "Martin Luther King Jr.", "topic": "Dreams"},
+    {"text": "Darkness cannot drive out darkness: only light can do that. Hate cannot drive out hate: only love can do that.", "author": "Martin Luther King Jr.", "topic": "Love"},
+    {"text": "Injustice anywhere is a threat to justice everywhere.", "author": "Martin Luther King Jr.", "topic": "Justice"},
+    {"text": "The time is always right to do what is right.", "author": "Martin Luther King Jr.", "topic": "Morality"},
+    {"text": "Faith is taking the first step even when you don't see the whole staircase.", "author": "Martin Luther King Jr.", "topic": "Faith"},
+    {"text": "We must accept finite disappointment, but never lose infinite hope.", "author": "Martin Luther King Jr.", "topic": "Hope"},
+    {"text": "Intelligence plus character—that is the goal of true education.", "author": "Martin Luther King Jr.", "topic": "Education"},
+    {"text": "Life's most persistent and urgent question is, 'What are you doing for others?'", "author": "Martin Luther King Jr.", "topic": "Service"},
+    {"text": "The function of education is to teach one to think intensively and to think critically. Intelligence plus character – that is the goal of true education.", "author": "Martin Luther King Jr.", "topic": "Education"},
+    {"text": "We must learn to live together as brothers or perish together as fools.", "author": "Martin Luther King Jr.", "topic": "Unity"},
+    {"text": "Human progress is neither automatic nor inevitable... Every step toward the goal of justice requires sacrifice, suffering, and struggle; the tireless exertions and passionate concern of dedicated individuals.", "author": "Martin Luther King Jr.", "topic": "Progress"},
+    {"text": "Everything that is done in this world is done by hope.", "author": "Martin Luther", "topic": "Hope"},
+    {"text": "Peace is not merely a distant goal that we seek, but a means by which we arrive at that goal.", "author": "Martin Luther King Jr.", "topic": "Peace"},
+
+    # Longest (50+ words)
+    {"text": "Here's to the crazy ones. The misfits. The rebels. The troublemakers. The round pegs in the square holes. The ones who see things differently. They're not fond of rules. And they have no respect for the status quo. You can quote them, disagree with them, glorify or vilify them. About the only thing you can't do is ignore them. Because they change things. They push the human race forward. And while some may see them as the crazy ones, we see genius. Because the people who are crazy enough to think they can change the world, are the ones who do.", "author": "Steve Jobs", "topic": "Innovation"},
+    {"text": "Your time is limited, so don't waste it living someone else's life. Don't be trapped by dogma – which is living with the results of other people's thinking. Don't let the noise of others' opinions drown out your own inner voice. And most important, have the courage to follow your heart and intuition. They somehow already know what you truly want to become. Everything else is secondary.", "author": "Steve Jobs", "topic": "Life"},
+    {"text": "Stay hungry, stay foolish. Have the courage to follow your heart and intuition. They somehow already know what you truly want to become. Everything else is secondary. Your time is limited, so don't waste it living someone else's life. Don't be trapped by dogma – which is living with the results of other people's thinking.", "author": "Steve Jobs", "topic": "Wisdom"},
+    {"text": "The reasonable man adapts himself to the world; the unreasonable one persists in trying to adapt the world to himself. Therefore all progress depends on the unreasonable man.", "author": "George Bernard Shaw", "topic": "Progress"},
+    {"text": "We are all in the gutter, but some of us are looking at the stars.", "author": "Oscar Wilde", "topic": "Hope"},
+    {"text": "Be yourself; everyone else is already taken.", "author": "Oscar Wilde", "topic": "Identity"},
+    {"text": "To live is the rarest thing in the world. Most people exist, that is all.", "author": "Oscar Wilde", "topic": "Life"},
+    {"text": "Always forgive your enemies; nothing annoys them so much.", "author": "Oscar Wilde", "topic": "Humor"},
+    {"text": "Experience is simply the name we give our mistakes.", "author": "Oscar Wilde", "topic": "Learning"},
+    {"text": "I can resist everything except temptation.", "author": "Oscar Wilde", "topic": "Humor"},
+    {"text": "We are all born mad. Some remain so.", "author": "Samuel Beckett", "topic": "Absurdism"},
+    {"text": "Ever tried. Ever failed. No matter. Try Again. Fail again. Fail better.", "author": "Samuel Beckett", "topic": "Perseverance"},
+    {"text": "Hell is other people.", "author": "Jean-Paul Sartre", "topic": "Existentialism"},
+    {"text": "Man is condemned to be free; because once thrown into the world, he is responsible for everything he does.", "author": "Jean-Paul Sartre", "topic": "Freedom"},
+    {"text": "Existence precedes essence. We act, and in acting, we define ourselves.", "author": "Jean-Paul Sartre", "topic": "Existentialism"},
+    {"text": "The absurd is the essential concept and the first truth.", "author": "Albert Camus", "topic": "Absurdism"},
+    {"text": "One must imagine Sisyphus happy.", "author": "Albert Camus", "topic": "Absurdism"},
+    {"text": "Real generosity toward the future lies in giving all to the present.", "author": "Albert Camus", "topic": "Time"},
+    {"text": "Don't walk behind me; I may not lead. Don't walk in front of me; I may not follow. Just walk beside me and be my friend.", "author": "Albert Camus", "topic": "Friendship"},
+    {"text": "The only way to deal with an unfree world is to become so absolutely free that your very existence is an act of rebellion.", "author": "Albert Camus", "topic": "Rebellion"},
+    {"text": "In the depth of winter, I finally learned that within me there lay an invincible summer.", "author": "Albert Camus", "topic": "Resilience"},
+    {"text": "Freedom is nothing but a chance to be better.", "author": "Albert Camus", "topic": "Freedom"},
+    {"text": "You will never be happy if you continue to search for what happiness consists of. You will never live if you are looking for the meaning of life.", "author": "Albert Camus", "topic": "Happiness"},
+    {"text": "Should I kill myself, or have a cup of coffee?", "author": "Albert Camus", "topic": "Absurdism"},
+    {"text": "There is but one truly serious philosophical problem, and that is suicide. Judging whether life is or is not worth living amounts to answering the fundamental question of philosophy.", "author": "Albert Camus", "topic": "Philosophy"},
+    {"text": "The struggle itself toward the heights is enough to fill a man's heart.", "author": "Albert Camus", "topic": "Struggle"},
+    {"text": "What is a rebel? A man who says no.", "author": "Albert Camus", "topic": "Rebellion"},
+    {"text": "I rebel; therefore I exist.", "author": "Albert Camus", "topic": "Existence"},
+    {"text": "Without freedom, no art; art lives only on the restraints it imposes on itself, and dies of all others.", "author": "Albert Camus", "topic": "Art"},
+    {"text": "Fiction is the lie through which we tell the truth.", "author": "Albert Camus", "topic": "Literature"}
+]
+
+def get_config():
+    if not os.path.exists(CONFIG_DIR):
+        os.makedirs(CONFIG_DIR)
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
-    except:
-        return []
+    return {"theme": "default", "minimal_stats": False}
+
+def save_config(config):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f)
+
+def get_scores():
+    if os.path.exists(SCORES_FILE):
+        with open(SCORES_FILE, 'r') as f:
+            return json.load(f)
+    return []
 
 def save_score(score_entry):
-    scores = load_scores()
+    scores = get_scores()
     scores.append(score_entry)
-    # Sort by WPM descending
-    scores.sort(key=lambda x: x.get('wpm', 0), reverse=True)
-    with open(CONFIG_DIR / "scores.json", 'w') as f:
-        json.dump(scores, f, indent=2)
+    # Keep top 100
+    scores.sort(key=lambda x: x['wpm'], reverse=True)
+    with open(SCORES_FILE, 'w') as f:
+        json.dump(scores[:100], f)
 
-# --- UI HELPERS ---
+# --- LOGIC HELPERS ---
+
+def get_text_for_mode(mode_arg):
+    """Returns (text, mode_name) based on user argument."""
+    if mode_arg == "custom":
+        print("Enter custom text (press Enter twice to finish):")
+        lines = []
+        while True:
+            line = input()
+            if line == "" and lines and lines[-1] == "":
+                break
+            lines.append(line)
+            if line == "" and len(lines) > 0:
+                # Allow single empty line to finish if previous was not empty? 
+                # Simpler: double enter.
+                pass 
+        return "\n".join(lines).strip(), "custom"
+
+    if mode_arg == "zen":
+        # Zen uses a random medium quote by default or specific logic
+        quote = random.choice([q for q in QUOTES_DB if 15 < len(q['text'].split()) <= 30])
+        return quote['text'], "zen"
+
+    if mode_arg.startswith("rand"):
+        try:
+            count = int(mode_arg.split('-')[1])
+            words = random.sample(RANDOM_WORDS, min(count, len(RANDOM_WORDS)))
+            return " ".join(words), f"rand-{count}"
+        except (IndexError, ValueError):
+            # Default to 25 if parsing fails
+            words = random.sample(RANDOM_WORDS, 25)
+            return " ".join(words), "rand-25"
+
+    if mode_arg in ["short", "medium", "long", "longest"]:
+        filtered = []
+        if mode_arg == "short":
+            filtered = [q for q in QUOTES_DB if 5 <= len(q['text'].split()) <= 15]
+        elif mode_arg == "medium":
+            filtered = [q for q in QUOTES_DB if 16 <= len(q['text'].split()) <= 30]
+        elif mode_arg == "long":
+            filtered = [q for q in QUOTES_DB if 31 <= len(q['text'].split()) <= 50]
+        elif mode_arg == "longest":
+            filtered = [q for q in QUOTES_DB if len(q['text'].split()) > 50]
+        
+        if not filtered:
+            return "No quotes found for this category.", "error"
+        q = random.choice(filtered)
+        return q['text'], f"quote-{mode_arg}"
+
+    if mode_arg == "quote":
+        q = random.choice(QUOTES_DB)
+        return q['text'], "quote-random"
+
+    # Fallback
+    q = random.choice(QUOTES_DB)
+    return q['text'], "random"
+
+# --- CURSES UI ---
 
 def draw_box(stdscr, y, x, h, w, title=""):
     try:
-        stdscr.attron(curses.color_pair(C_BORDER))
+        stdscr.attron(curses.color_pair(4)) # Box color
+        for i in range(h):
+            stdscr.addstr(y + i, x, " " * w)
+        
+        # Corners and lines
         stdscr.addch(y, x, curses.ACS_ULCORNER)
         stdscr.addch(y, x + w - 1, curses.ACS_URCORNER)
         stdscr.addch(y + h - 1, x, curses.ACS_LLCORNER)
         stdscr.addch(y + h - 1, x + w - 1, curses.ACS_LRCORNER)
-        
         for i in range(1, w - 1):
             stdscr.addch(y, x + i, curses.ACS_HLINE)
             stdscr.addch(y + h - 1, x + i, curses.ACS_HLINE)
         for i in range(1, h - 1):
             stdscr.addch(y + i, x, curses.ACS_VLINE)
             stdscr.addch(y + i, x + w - 1, curses.ACS_VLINE)
-            
+        
         if title:
-            start_pos = x + (w // 2) - (len(title) // 2)
-            stdscr.addstr(y, start_pos, f" {title} ", curses.A_REVERSE | curses.color_pair(C_BORDER))
-        stdscr.attroff(curses.color_pair(C_BORDER))
+            stdscr.addstr(y, x + 2, f" {title} ", curses.A_BOLD)
+        stdscr.attroff(curses.color_pair(4))
     except curses.error:
         pass
 
-def center_text(text, width):
-    padding = (width - len(text)) // 2
-    if padding < 0: padding = 0
-    return " " * padding + text
+def main_ui(stdscr):
+    curses.curs_set(0)
+    curses.start_color()
+    curses.use_default_colors()
+    
+    # Colors: 1=Correct(Blue), 2=Error(Red), 3=Cursor(Green BG), 4=Box(Cyan), 5=Dim
+    curses.init_pair(1, curses.COLOR_BLUE, -1)
+    curses.init_pair(2, curses.COLOR_RED, -1)
+    curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_GREEN)
+    curses.init_pair(4, curses.COLOR_CYAN, -1)
+    curses.init_pair(5, curses.COLOR_WHITE, -1)
 
-# --- GAME LOGIC ---
-
-class TypingSession:
-    def __init__(self, stdscr, mode, target_length=None, length_cat=None):
-        self.stdscr = stdscr
-        self.mode = mode
-        self.target_length = target_length
-        self.length_cat = length_cat
-        self.text = ""
-        self.author = ""
-        self.topic = ""
-        self.user_input = ""
-        self.start_time = 0
-        self.end_time = 0
-        self.finished = False
-        self.errors = 0
-        self.correct_chars = 0
-        self.total_typed = 0
-        self.cursor_pos = 0
-        self.zen_mode = (mode == "zen")
-        self.minimal_stats = False
+    config = get_config()
+    
+    # Get Mode from Args if needed, here we assume called via wrapper or direct
+    # For simplicity in this single-file version, we rely on env var or default
+    mode_arg = os.environ.get("SCRIBERE_MODE", "rand-25")
+    
+    target_text, mode_name = get_text_for_mode(mode_arg)
+    
+    # State
+    user_input = ""
+    start_time = None
+    finished = False
+    show_results = False
+    show_scores = False
+    minimal_stats = config.get("minimal_stats", False)
+    
+    # Scroll offset for long texts
+    scroll_offset = 0
+    
+    while True:
+        h, w = stdscr.getmaxyx()
+        stdscr.clear()
         
-        self.prepare_text()
-        self.setup_colors()
+        # Header
+        stdscr.addstr(0, 2, f" SCRIBERE | Mode: {mode_name} ", curses.A_BOLD | curses.color_pair(4))
+        stdscr.addstr(0, w - 10, " ESC:Quit ", curses.A_DIM)
+        
+        if show_scores:
+            # High Scores View
+            scores = get_scores()
+            draw_box(stdscr, 2, 2, h-4, w-4, " HIGH SCORES (M to Close) ")
+            stdscr.addstr(3, 5, f"{'Rank':<5} {'WPM':<6} {'Acc':<6} {'Mode':<15} {'Date'}", curses.A_UNDERLINE)
+            for i, s in enumerate(scores[:15]): # Show top 15
+                date = s.get('date', 'N/A')[:10]
+                stdscr.addstr(4+i, 5, f"{i+1:<5} {s['wpm']:<6.1f} {s['acc']:<6.1f}% {s['mode']:<15} {date}")
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key == ord('m') or key == curses.KEY_ENTER or key == 10 or key == 13:
+                show_scores = False
+            continue
 
-    def setup_colors(self):
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(C_NORMAL, curses.COLOR_WHITE, -1)
-        curses.init_pair(C_CURSOR, curses.COLOR_BLACK, curses.COLOR_GREEN)
-        curses.init_pair(C_TYPED_CORRECT, curses.COLOR_BLUE, -1)
-        curses.init_pair(C_TYPED_ERROR, curses.COLOR_RED, -1)
-        curses.init_pair(C_SUBTLE, curses.COLOR_CYAN, -1)
-        curses.init_pair(C_BORDER, curses.COLOR_WHITE, -1)
-        curses.init_pair(C_HIGHLIGHT, curses.COLOR_YELLOW, -1)
-
-    def prepare_text(self):
-        if self.mode == "custom":
-            # Handled in main loop before init usually, but fallback here
-            self.text = "Custom text loading..." 
-            return
+        if show_results:
+            # Results Screen
+            elapsed = time.time() - start_time if start_time else 0
+            wpm = (len(user_input.split()) / 5) / (elapsed / 60) if elapsed > 0 else 0
             
-        pool = []
-        if self.mode == "rand":
-            # Filter by approximate length if target_length provided
-            if self.target_length:
-                tolerance = 10
-                min_w = max(5, self.target_length - tolerance)
-                max_w = self.target_length + tolerance
-                for q in RAW_QUOTES:
-                    w_count = len(q["text"].split())
-                    if min_w <= w_count <= max_w:
-                        pool.append(q)
-            if not pool: # Fallback to any random if specific length fails
-                pool = RAW_QUOTES
-                
-        elif self.mode == "quote":
-            pool = RAW_QUOTES
-        elif self.mode in ["short", "medium", "long", "longest"]:
-            pool = QUOTE_DB.get(self.mode, RAW_QUOTES)
-        elif self.mode == "zen":
-             pool = RAW_QUOTES # Zen uses random quotes usually
-        else:
-            pool = RAW_QUOTES
+            # Calculate accuracy
+            errors = sum(1 for i, c in enumerate(user_input) if i < len(target_text) and c != target_text[i])
+            accuracy = (1 - (errors / len(user_input))) * 100 if len(user_input) > 0 else 0
+            
+            draw_box(stdscr, 2, 2, 10, 60, " RESULTS ")
+            
+            stats_y = 4
+            stdscr.addstr(stats_y, 5, f"WPM: {wpm:.1f}", curses.A_BOLD | curses.color_pair(1))
+            stdscr.addstr(stats_y, 25, f"Accuracy: {accuracy:.1f}%", curses.A_BOLD | curses.color_pair(2 if accuracy < 90 else 1))
+            
+            if not minimal_stats:
+                stdscr.addstr(stats_y+2, 5, f"Chars: {len(user_input)}", curses.A_DIM)
+                stdscr.addstr(stats_y+2, 25, f"Errors: {errors}", curses.A_DIM)
+                stdscr.addstr(stats_y+2, 45, f"Time: {elapsed:.1f}s", curses.A_DIM)
+            
+            stdscr.addstr(stats_y+5, 5, " Press Enter to Restart | M: Scores | D: Toggle Stats ", curses.A_REVERSE)
+            stdscr.refresh()
+            
+            key = stdscr.getch()
+            if key == ord('m'):
+                show_scores = True
+            elif key == ord('d'):
+                minimal_stats = not minimal_stats
+                config["minimal_stats"] = minimal_stats
+                save_config(config)
+            elif key == 10 or key == 13: # Enter
+                # Restart
+                target_text, mode_name = get_text_for_mode(mode_arg)
+                user_input = ""
+                start_time = None
+                finished = False
+                show_results = False
+                scroll_offset = 0
 
-        selected = random.choice(pool)
-        self.text = selected["text"]
-        self.author = selected.get("author", "Unknown")
-        self.topic = selected.get("topic", "General")
+            continue
 
-    def calculate_stats(self):
-        duration = max(1, self.end_time - self.start_time)
-        minutes = duration / 60.0
-        wpm = round((self.correct_chars / 5) / minutes, 1) if minutes > 0 else 0
-        accuracy = round((self.correct_chars / max(1, self.total_typed)) * 100, 1)
-        return {
-            "wpm": wpm,
-            "accuracy": accuracy,
-            "errors": self.errors,
-            "correct": self.correct_chars,
-            "total": len(self.text),
-            "duration": round(duration, 2),
-            "mode": self.mode,
-            "length_cat": self.length_cat or self.mode,
-            "timestamp": datetime.now().isoformat()
-        }
-
-    def render(self):
-        self.stdscr.clear()
-        h, w = self.stdscr.getmaxyx()
-        
-        # Draw Border
-        box_h, box_w = h - 4, w - 4
-        start_y, start_x = 2, 2
-        draw_box(self.stdscr, start_y, start_x, box_h, box_w, f"Scribere [{self.mode.upper()}]")
+        # Typing Area
+        box_h = min(15, h - 6)
+        draw_box(stdscr, 2, 2, box_h, w - 4, " TYPE HERE ")
         
         # Render Text
-        display_text = self.text
-        input_len = len(self.user_input)
+        # Simple wrapping logic
+        content_x = 4
+        content_y = 4
+        max_w = w - 8
         
-        # Wrap text logic simplified for terminal (assume fits or simple scroll)
-        # For true multiline wrap, we'd need complex logic. 
-        # Minimalist approach: Center the block.
-        
-        lines = []
-        current_line = ""
-        for char in display_text:
-            if len(current_line) + 1 > w - 8: # Break before border
-                lines.append(current_line)
-                current_line = char
-            else:
-                current_line += char
-        if current_line:
-            lines.append(current_line)
-            
-        # Calculate start Y to center vertically
-        total_lines = len(lines)
-        text_start_y = start_y + (box_h // 2) - (total_lines // 2)
-        
+        current_word = ""
         char_idx = 0
-        for l_idx, line in enumerate(lines):
-            y_pos = text_start_y + l_idx
-            if y_pos >= start_y + box_h - 1: break
+        
+        # Adjust scroll if cursor goes out of view
+        # Calculate cursor position roughly
+        # This is a simplified renderer. For perfect scrolling, we'd map chars to coords.
+        
+        for i, char in enumerate(target_text):
+            if content_y >= 2 + box_h - 1:
+                break # Stop drawing if box full
             
-            line_start_x = start_x + 2 # Padding inside box
-            
-            for c_idx, char in enumerate(line):
-                x_pos = line_start_x + c_idx
-                if x_pos >= start_x + box_w - 2: continue
-                
-                if char_idx >= input_len:
-                    # Not typed yet
-                    if char_idx == input_len and not self.finished:
-                        # Cursor position
-                        try:
-                            self.stdscr.addch(y_pos, x_pos, char, curses.color_pair(C_CURSOR) | curses.A_BOLD)
-                        except: pass
-                    else:
-                        try:
-                            self.stdscr.addch(y_pos, x_pos, char, curses.color_pair(C_NORMAL))
-                        except: pass
+            # Determine color
+            color = curses.color_pair(5) # Default white
+            if i < len(user_input):
+                if user_input[i] == char:
+                    color = curses.color_pair(1) # Blue correct
                 else:
-                    # Typed
-                    user_char = self.user_input[char_idx]
-                    if user_char == char:
-                        try:
-                            self.stdscr.addch(y_pos, x_pos, char, curses.color_pair(C_TYPED_CORRECT) | curses.A_BOLD)
-                        except: pass
-                    else:
-                        try:
-                            self.stdscr.addch(y_pos, x_pos, char, curses.color_pair(C_TYPED_ERROR) | curses.A_UNDERLINE)
-                        except: pass
-                char_idx += 1
-
-        # Status Bar
-        status_y = h - 2
-        if self.zen_mode and not self.finished:
-            status_msg = "ZEN MODE: Type freely. Press SHIFT+ENTER to finish."
-        elif self.finished:
-            status_msg = "Test Complete. Press ENTER to see results, 'M' for High Scores."
-        else:
-            stats = self.calculate_stats() # Live calc
-            if self.minimal_stats:
-                status_msg = f"WPM: {stats['wpm']} | Acc: {stats['accuracy']}%"
+                    color = curses.color_pair(2) # Red error
+            
+            # Cursor highlight
+            if i == len(user_input):
+                stdscr.addstr(content_y, content_x, char, curses.color_pair(3) | curses.A_BOLD)
             else:
-                status_msg = f"Time: {int(time.time() - self.start_time)}s | Errors: {self.errors} | WPM: {stats['wpm']}"
-        
-        try:
-            self.stdscr.addstr(status_y, 2, status_msg[:w-4], curses.color_pair(C_SUBTLE) | curses.A_BOLD)
-        except: pass
-        
-        self.stdscr.refresh()
-
-    def run(self):
-        self.start_time = time.time()
-        self.stdscr.nodelay(False)
-        self.stdscr.keypad(True)
-        curses.curs_set(0) # Hide system cursor
-
-        while True:
-            self.render()
-            key = self.stdscr.getch()
+                try:
+                    stdscr.addstr(content_y, content_x, char, color)
+                except curses.error:
+                    pass
             
-            if key == 27: # ESC
-                return None # Quit
-            
-            if self.finished:
-                if key == 10 or key == 13: # Enter
-                    return self.calculate_stats()
-                if key == ord('m') or key == ord('M'):
-                    show_highscores(self.stdscr, self.calculate_stats())
-                    self.render() # Redraw after menu
-                if key == ord('d') or key == ord('D'):
-                    self.minimal_stats = not self.minimal_stats
-                continue
-
-            # Typing Logic
-            if key == curses.KEY_BACKSPACE or key == 127 or key == 8:
-                if len(self.user_input) > 0:
-                    self.user_input = self.user_input[:-1]
-            elif key == 10 or key == 13: # Enter
-                if self.zen_mode:
-                    # Check if Shift was held? Curses doesn't easily detect shift+enter combo cleanly across all terminals without raw mode complexity.
-                    # Heuristic: In Zen mode, Enter finishes.
-                    self.finished = True
-                    self.end_time = time.time()
-            elif 32 <= key <= 126: # Printable
-                char = chr(key)
-                self.user_input += char
-                self.total_typed += 1
+            # Move cursor
+            content_x += 1
+            if content_x >= w - 6:
+                content_x = 4
+                content_y += 1
                 
-                if len(self.user_input) <= len(self.text):
-                    idx = len(self.user_input) - 1
-                    if self.user_input[idx] == self.text[idx]:
-                        self.correct_chars += 1
-                    else:
-                        self.errors += 1
-                
-                # Auto finish if text completed
-                if len(self.user_input) == len(self.text):
-                    self.finished = True
-                    self.end_time = time.time()
-
-def show_highscores(stdscr, current_score=None):
-    scores = load_scores()
-    if current_score:
-        save_score(current_score)
-        scores = load_scores() # Reload
-    
-    stdscr.clear()
-    h, w = stdscr.getmaxyx()
-    
-    # Simple Menu
-    title = "HIGH SCORES (M to Close, Arrows to Scroll)"
-    draw_box(stdscr, 1, 1, h-2, w-2, title)
-    
-    start_y = 4
-    max_entries = h - 8
-    
-    # Display top scores
-    for i, score in enumerate(scores[:max_entries]):
-        y = start_y + i
-        if y >= h - 3: break
-        msg = f"#{i+1} {score['wpm']} WPM | {score['accuracy']}% | {score['mode']} | {score['timestamp'][:10]}"
-        try:
-            stdscr.addstr(y, 4, msg, curses.color_pair(C_NORMAL))
-        except: pass
-    
-    if current_score:
-        msg = f"YOUR RESULT: {current_score['wpm']} WPM"
-        try:
-            stdscr.addstr(h-4, 4, msg, curses.color_pair(C_HIGHLIGHT) | curses.A_BOLD)
-        except: pass
+        # Draw User Input Progress (Visual feedback below or overlay)
+        # In this minimalist design, the colored text IS the feedback.
         
-    stdscr.refresh()
-    while True:
-        k = stdscr.getch()
-        if k == ord('m') or k == ord('M') or k == 27:
-            break
-
-def custom_input_loop(stdscr):
-    stdscr.clear()
-    h, w = stdscr.getmaxyx()
-    draw_box(stdscr, 2, 2, h-4, w-4, "CUSTOM TEXT INPUT")
-    stdscr.addstr(4, 4, "Type or paste your text below. Press ESC when done.")
-    stdscr.addstr(5, 4, "> ")
-    stdscr.refresh()
-    
-    curses.echo()
-    stdscr.nodelay(False)
-    input_text = ""
-    
-    # Simple single line input for minimalism, or multi-line? 
-    # Let's do multi-line until ESC
-    temp_win = curses.newwin(h-8, w-8, 7, 4)
-    temp_win.keypad(True)
-    temp_win.refresh()
-    
-    lines = []
-    while True:
-        key = temp_win.getch()
-        if key == 27: # ESC
-            break
-        if key == 10: # Enter
-            lines.append("")
-        elif key == curses.KEY_BACKSPACE:
-            if lines and len(lines[-1]) == 0:
-                if len(lines) > 0: lines.pop()
-            elif lines:
-                lines[-1] = lines[-1][:-1]
-        elif 32 <= key <= 126:
-            if not lines: lines.append("")
-            lines[-1] += chr(key)
+        # Status bar
+        status = f"Typed: {len(user_input)}/{len(target_text)}"
+        if mode_name == "zen":
+            status += " | Shift+Enter to Finish"
+        stdscr.addstr(h-2, 2, status, curses.A_DIM)
         
-        temp_win.clear()
-        for i, line in enumerate(lines):
-            try: temp_win.addstr(i, 0, line)
-            except: pass
-        temp_win.refresh()
-    
-    curses.noecho()
-    return " ".join(lines)
-
-def main_curses(stdscr, args):
-    ensure_config()
-    mode = args[0] if args else "rand"
-    target_len = None
-    
-    # Parse arguments like "rand-25"
-    if mode.startswith("rand-"):
-        try:
-            target_len = int(mode.split("-")[1])
-            mode = "rand"
-        except:
-            mode = "rand"
-    
-    session = None
-    
-    if mode == "custom":
-        text = custom_input_loop(stdscr)
-        if not text.strip():
-            return
-        # Create a dummy session then override text
-        session = TypingSession(stdscr, "custom")
-        session.text = text
-        session.author = "Custom"
-        session.topic = "User"
-    else:
-        # Determine length category if mode is specific
-        cat = None
-        if mode in ["short", "medium", "long", "longest"]:
-            cat = mode
-        session = TypingSession(stdscr, mode, target_length=target_len, length_cat=cat)
-    
-    result = session.run()
-    
-    if result:
-        # Results Screen
-        stdscr.clear()
-        h, w = stdscr.getmaxyx()
-        draw_box(stdscr, 2, 2, h-4, w-4, "RESULTS")
-        
-        mid_y = h // 2
-        stats = [
-            f"WPM: {result['wpm']}",
-            f"Accuracy: {result['accuracy']}%",
-            f"Errors: {result['errors']}",
-            f"Chars: {result['correct']}/{result['total']}",
-            f"Time: {result['duration']}s"
-        ]
-        
-        for i, line in enumerate(stats):
-            try:
-                stdscr.addstr(mid_y - 2 + i, w//2 - 10, line, curses.A_BOLD | curses.color_pair(C_TYPED_CORRECT))
-            except: pass
-            
-        stdscr.addstr(h-4, 4, "Press ENTER to continue, M for High Scores, D to toggle stats detail", curses.color_pair(C_SUBTLE))
         stdscr.refresh()
         
-        # Loop for post-game actions handled in session.run() usually, 
-        # but here we just exit to let the wrapper handle restart or quit
-        stdscr.getch()
-
-def run_app(args):
-    try:
-        curses.wrapper(lambda stdscr: main_curses(stdscr, args))
-    except Exception as e:
-        print(f"Scribere Error: {e}")
-        sys.exit(1)
+        # Input Handling
+        key = stdscr.getch()
+        
+        if key == 27: # ESC
+            break
+        
+        if finished:
+            continue
+            
+        if start_time is None and key != curses.KEY_ENTER:
+            start_time = time.time()
+            
+        if key == curses.KEY_BACKSPACE or key == 127 or key == 8:
+            if len(user_input) > 0:
+                user_input = user_input[:-1]
+        elif key == 10 or key == 13: # Enter
+            if mode_name == "zen":
+                finished = True
+                show_results = True
+                # Save Score
+                elapsed = time.time() - start_time
+                wpm = (len(user_input.split()) / 5) / (elapsed / 60) if elapsed > 0 else 0
+                errors = sum(1 for i, c in enumerate(user_input) if i < len(target_text) and c != target_text[i])
+                acc = (1 - (errors / len(user_input))) * 100 if len(user_input) > 0 else 0
+                save_score({"wpm": wpm, "acc": acc, "mode": mode_name, "date": time.strftime("%Y-%m-%d")})
+            else:
+                # In normal mode, Enter might just add a newline if in custom, 
+                # but for quotes/words, usually space is enough. 
+                # Let's treat Enter as finish for non-zen too if desired, or ignore.
+                # Monkeytype: Space advances. Enter finishes test? 
+                # Let's make Enter finish test for all modes for simplicity.
+                finished = True
+                show_results = True
+                elapsed = time.time() - start_time
+                wpm = (len(user_input.split()) / 5) / (elapsed / 60) if elapsed > 0 else 0
+                errors = sum(1 for i, c in enumerate(user_input) if i < len(target_text) and c != target_text[i])
+                acc = (1 - (errors / len(user_input))) * 100 if len(user_input) > 0 else 0
+                save_score({"wpm": wpm, "acc": acc, "mode": mode_name, "date": time.strftime("%Y-%m-%d")})
+                
+        elif 32 <= key <= 126: # Printable
+            if len(user_input) < len(target_text):
+                user_input += chr(key)
+            elif len(user_input) == len(target_text):
+                # Auto finish if typed exactly to end
+                finished = True
+                show_results = True
+                elapsed = time.time() - start_time
+                wpm = (len(user_input.split()) / 5) / (elapsed / 60) if elapsed > 0 else 0
+                errors = sum(1 for i, c in enumerate(user_input) if i < len(target_text) and c != target_text[i])
+                acc = (1 - (errors / len(user_input))) * 100 if len(user_input) > 0 else 0
+                save_score({"wpm": wpm, "acc": acc, "mode": mode_name, "date": time.strftime("%Y-%m-%d")})
 
 if __name__ == "__main__":
-    # CLI Entry Point
+    # Check args for mode
     if len(sys.argv) > 1:
-        run_app(sys.argv[1:])
+        # Pass mode to env for the curses app to pick up
+        # Or refactor to pass directly. Env is easiest for this structure.
+        os.environ["SCRIBERE_MODE"] = sys.argv[1]
     else:
-        print("Scribere v" + VERSION)
-        print("Usage: scribere start [mode]")
-        print("Modes: rand-25, short, medium, long, longest, zen, custom, quote")
-        print("Example: scribere start rand-25")
+        os.environ["SCRIBERE_MODE"] = "rand-25"
+        
+    try:
+        curses.wrapper(main_ui)
+    except KeyboardInterrupt:
+        pass
