@@ -7,6 +7,7 @@ import sys
 import argparse
 import urllib.request
 import io
+from typing import List, Dict, Any, Optional, Tuple
 
 # Try to import Pillow for the easter egg
 try:
@@ -15,11 +16,33 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
-# --- Configuration & Data ---
+# --- Configuration & Constants ---
 
 CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".scribere")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 SCORES_FILE = os.path.join(CONFIG_DIR, "scores.json")
+
+# Display constants
+MIN_TERMINAL_WIDTH = 40
+MIN_TERMINAL_HEIGHT = 15
+MAX_HISTORY_SIZE = 100
+MAX_HIGHSCORES_DISPLAY = 15
+MENU_WIDTH = 60
+MENU_HEIGHT = 14
+SUBMENU_WIDTH = 40
+SUBMENU_HEIGHT = 10
+
+# Easter egg configuration
+EASTER_EGG_URL = "https://f4.bcbits.com/img/a1664460568_10.jpg"
+EASTER_EGG_TIMEOUT = 10
+
+# ASCII art gradient characters (from dark to light)
+ASCII_GRADIENT = "█▓▒░ "
+
+# Word count validation
+MIN_WORD_COUNT = 5
+MAX_WORD_COUNT = 500
+DEFAULT_WORD_COUNT = 25
 
 # Common Words Bank (Frequency weighted by repetition)
 BASE_WORDS = [
@@ -134,47 +157,62 @@ TEMPLATE_FILLERS = {
     "pronoun": ["I", "you", "he", "she", "it", "we", "they"]
 }
 
-def ensure_config():
+def ensure_config() -> None:
+    """Ensure configuration directory and files exist with defaults."""
     if not os.path.exists(CONFIG_DIR):
         os.makedirs(CONFIG_DIR)
     if not os.path.exists(CONFIG_FILE):
-        default_config = {
+        default_config: Dict[str, Any] = {
             "color_theme": "default",
             "minimal_stats": False,
             "word_bank": "common",
             "smart_sentences": False,
             "default_mode": "rand",
-            "default_count": 25
+            "default_count": DEFAULT_WORD_COUNT
         }
         with open(CONFIG_FILE, 'w') as f:
-            json.dump(default_config, f)
+            json.dump(default_config, f, indent=2)
     if not os.path.exists(SCORES_FILE):
         with open(SCORES_FILE, 'w') as f:
             json.dump([], f)
 
-def load_config():
+def load_config() -> Dict[str, Any]:
+    """Load configuration from file with fallback defaults."""
     try:
         with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
-    except:
-        return {"word_bank": "common", "smart_sentences": False, "minimal_stats": False, "default_mode": "rand", "default_count": 25}
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        return {
+            "word_bank": "common", 
+            "smart_sentences": False, 
+            "minimal_stats": False, 
+            "default_mode": "rand", 
+            "default_count": DEFAULT_WORD_COUNT
+        }
 
-def save_config(config):
+def save_config(config: Dict[str, Any]) -> None:
+    """Save configuration to file."""
     with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f)
+        json.dump(config, f, indent=2)
 
-def load_scores():
+def load_scores() -> List[Dict[str, Any]]:
+    """Load scores from file with fallback to empty list."""
     try:
         with open(SCORES_FILE, 'r') as f:
             return json.load(f)
-    except:
+    except (FileNotFoundError, json.JSONDecodeError):
         return []
 
-def save_scores(scores):
+def save_scores(scores: List[Dict[str, Any]]) -> None:
+    """Save scores to file."""
     with open(SCORES_FILE, 'w') as f:
-        json.dump(scores, f)
+        json.dump(scores, f, indent=2)
 
-def get_random_words(count, word_bank="common", smart=False):
+def get_random_words(count: int, word_bank: str = "common", smart: bool = False) -> str:
+    """Generate random words or smart sentences for typing practice."""
+    # Validate count
+    count = max(MIN_WORD_COUNT, min(MAX_WORD_COUNT, count))
+    
     if word_bank == "complex":
         source = COMPLEX_WORDS
     else:
@@ -196,13 +234,14 @@ def get_random_words(count, word_bank="common", smart=False):
 
 # --- Easter Egg Logic ---
 
-def fetch_and_convert_image(url):
+def fetch_and_convert_image(url: str) -> List[str]:
+    """Fetch an image from URL and convert to ASCII art with improved quality."""
     if not PIL_AVAILABLE:
         return ["Pillow library not installed.", "Run: pip install Pillow"]
     
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        response = urllib.request.urlopen(req, timeout=10)
+        response = urllib.request.urlopen(req, timeout=EASTER_EGG_TIMEOUT)
         img_data = response.read()
         
         img = Image.open(io.BytesIO(img_data))
@@ -211,66 +250,67 @@ def fetch_and_convert_image(url):
         h_term, w_term = os.get_terminal_size()
         # Calculate max usable size (leave some margin)
         max_w = w_term - 4
-        max_h = h_term - 4
+        max_h = h_term - 6  # Extra space for instructions
         
-        # Resize image maintaining aspect ratio (chars are ~2x taller than wide)
+        # Resize image maintaining aspect ratio
+        # Terminal characters are typically ~2x taller than wide
         aspect = img.width / img.height
         new_w = max_w
         new_h = int(new_w / aspect * 0.5)
         
         if new_h > max_h:
             new_h = max_h
-            new_w = int(new_h * aspect)
+            new_w = int(new_h * aspect * 2)  # Compensate for character aspect ratio
             
         img = img.convert('L').resize((new_w, new_h), Image.Resampling.LANCZOS)
         
         pixels = list(img.getdata())
-        # Binary blocks for high contrast
-        chars = "█ " 
         
+        # Use gradient characters for better detail representation
         ascii_lines = []
         for i in range(new_h):
             line = ""
             for j in range(new_w):
                 pixel = pixels[i * new_w + j]
-                # Threshold at 128
-                char_idx = 0 if pixel < 128 else 1
-                line += chars[char_idx]
+                # Map pixel value (0-255) to gradient index
+                char_idx = min(pixel // (256 // len(ASCII_GRADIENT)), len(ASCII_GRADIENT) - 1)
+                line += ASCII_GRADIENT[char_idx]
             ascii_lines.append(line)
         
         return ascii_lines
+    except urllib.error.URLError as e:
+        return [f"Network error: {str(e)}", "Check internet connection."]
     except Exception as e:
-        return [f"Error loading image: {str(e)}", "Check internet connection."]
+        return [f"Error loading image: {str(e)}", "Try again later."]
 
-def show_secret_screen(stdscr):
+
+def show_secret_screen(stdscr) -> None:
+    """Display the Easter egg image without text."""
     stdscr.clear()
     stdscr.nodelay(False)
     curses.curs_set(0)
     
     h, w = stdscr.getmaxyx()
     
-    title = " SECRET FOUND "
-    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-    try:
-        stdscr.addstr(0, (w - len(title)) // 2, title)
-    except: pass
-    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+    # Fetch and display image only (no title text)
+    lines = fetch_and_convert_image(EASTER_EGG_URL)
     
-    lines = fetch_and_convert_image("https://f4.bcbits.com/img/a1664460568_10.jpg")
-    
-    start_y = 2
+    start_y = 1
     for i, line in enumerate(lines):
         if start_y + i >= h - 2:
             break
         x_pos = max(0, (w - len(line)) // 2)
         try:
-            stdscr.addstr(start_y + i, x_pos, line, curses.color_pair(1) | curses.A_BOLD)
-        except: pass
+            # Use cyan color for the image
+            stdscr.addstr(start_y + i, x_pos, line, curses.color_pair(6) | curses.A_BOLD)
+        except curses.error:
+            pass
     
     msg = " Press any key to return "
     try:
         stdscr.addstr(h - 2, (w - len(msg)) // 2, msg, curses.color_pair(5) | curses.A_DIM)
-    except: pass
+    except curses.error:
+        pass
     stdscr.refresh()
     stdscr.getch()
 
@@ -376,17 +416,22 @@ class TypingApp:
                 self.draw_main_menu()
                 break
             elif key == ord('5'):
-                # Simple input for count
+                # Simple input for count with validation
                 curses.echo()
-                win.addstr(menu_h - 2, 2, " Enter word count: ")
+                win.addstr(menu_h - 2, 2, f" Enter word count ({MIN_WORD_COUNT}-{MAX_WORD_COUNT}): ")
                 win.refresh()
                 try:
-                    input_str = win.getstr(menu_h - 2, 22, 3).decode('utf-8')
+                    input_str = win.getstr(menu_h - 2, 48, 4).decode('utf-8')
                     if input_str.isdigit():
-                        self.target_count = int(input_str)
-                        self.config["default_count"] = self.target_count
-                        save_config(self.config)
-                except: pass
+                        count = int(input_str)
+                        if MIN_WORD_COUNT <= count <= MAX_WORD_COUNT:
+                            self.target_count = count
+                            self.config["default_count"] = self.target_count
+                            save_config(self.config)
+                        else:
+                            win.addstr(menu_h - 1, 2, f" Please enter {MIN_WORD_COUNT}-{MAX_WORD_COUNT} ", curses.color_pair(2))
+                except (ValueError, UnicodeDecodeError):
+                    pass
                 curses.noecho()
                 self.draw_main_menu()
                 break
@@ -406,7 +451,8 @@ class TypingApp:
                 self.running = False
                 break
 
-    def draw_screen(self):
+    def draw_screen(self) -> None:
+        """Draw the main typing screen with text and statistics."""
         if self.show_main_menu:
             self.draw_main_menu()
             return
@@ -418,30 +464,43 @@ class TypingApp:
         self.stdscr.erase()
         height, width = self.stdscr.getmaxyx()
         
+        # Validate terminal size
+        if height < MIN_TERMINAL_HEIGHT or width < MIN_TERMINAL_WIDTH:
+            try:
+                self.stdscr.addstr(0, 0, f"Terminal too small. Need {MIN_TERMINAL_WIDTH}x{MIN_TERMINAL_HEIGHT}", curses.color_pair(2))
+            except curses.error:
+                pass
+            self.stdscr.refresh()
+            return
+        
         try:
             self.stdscr.box()
             self.stdscr.attron(curses.color_pair(5))
             self.stdscr.box()
             self.stdscr.attroff(curses.color_pair(5))
-        except: pass
+        except curses.error:
+            pass
 
         title = " SCRIBERE "
-        start_x = (width - len(title)) // 2
+        start_x = max(0, (width - len(title)) // 2)
         try:
             self.stdscr.addstr(0, start_x, title, curses.color_pair(5) | curses.A_BOLD)
-        except: pass
+        except curses.error:
+            pass
 
         status = f" Mode: {self.mode.upper()} | Words: {self.target_count} | Bank: {self.word_bank} "
         if self.finished:
             status = " TEST COMPLETE "
         try:
             self.stdscr.addstr(2, 2, status, curses.color_pair(5))
-        except: pass
+        except curses.error:
+            pass
 
         start_row = 4
         max_rows = height - 8
         max_cols = width - 4
         
+        # Word wrapping logic
         wrapped_lines = []
         current_line = ""
         for char in self.text:
@@ -455,6 +514,7 @@ class TypingApp:
         
         flat_cursor = min(self.cursor_pos, len(self.text))
         
+        # Find cursor line index
         current_flat = 0
         cursor_line_idx = 0
         for l_idx, line in enumerate(wrapped_lines):
@@ -463,6 +523,7 @@ class TypingApp:
                 break
             current_flat += len(line)
         
+        # Calculate scroll offset to keep cursor visible
         scroll_offset = 0
         if cursor_line_idx >= max_rows:
             scroll_offset = cursor_line_idx - max_rows + 1
@@ -470,29 +531,31 @@ class TypingApp:
         visible_lines = wrapped_lines[scroll_offset : scroll_offset + max_rows]
         global_flat_idx = sum(len(l) for l in wrapped_lines[:scroll_offset])
         
+        # Render visible lines
         for r_idx, line in enumerate(visible_lines):
             screen_r = start_row + r_idx
-            if screen_r >= height - 2: break
+            if screen_r >= height - 2:
+                break
             
             for c_idx, char in enumerate(line):
-                t_char = char
                 char_idx_global = global_flat_idx + c_idx
                 
                 attr = curses.color_pair(4)
                 
                 if char_idx_global < len(self.user_input):
                     u_char = self.user_input[char_idx_global]
-                    if u_char == t_char:
-                        attr = curses.color_pair(1)
+                    if u_char == char:
+                        attr = curses.color_pair(1)  # Correct
                     else:
-                        attr = curses.color_pair(2)
+                        attr = curses.color_pair(2)  # Error
                 
                 if char_idx_global == flat_cursor and not self.finished:
-                    attr = curses.color_pair(3) | curses.A_REVERSE
+                    attr = curses.color_pair(3) | curses.A_REVERSE  # Cursor
                 
                 try:
-                    self.stdscr.addch(screen_r, 2 + c_idx, t_char, attr)
-                except: pass
+                    self.stdscr.addch(screen_r, 2 + c_idx, char, attr)
+                except curses.error:
+                    pass
             
             global_flat_idx += len(line)
 
@@ -508,31 +571,37 @@ class TypingApp:
             stats_str = f" WPM: {wpm} | Acc: {self.get_accuracy():.1f}% | Err: {self.errors} "
             try:
                 self.stdscr.addstr(height - 2, 2, stats_str, curses.color_pair(5) | curses.A_DIM)
-            except: pass
+            except curses.error:
+                pass
         
         self.stdscr.refresh()
 
-    def draw_submenu(self):
+    def draw_submenu(self) -> None:
+        """Draw the pause submenu."""
         h, w = self.stdscr.getmaxyx()
         self.stdscr.erase()
-        menu_h, menu_w = 10, 40
+        menu_h, menu_w = SUBMENU_HEIGHT, SUBMENU_WIDTH
         start_y, start_x = (h - menu_h) // 2, (w - menu_w) // 2
         win = curses.newwin(menu_h, menu_w, start_y, start_x)
         win.box()
         win.addstr(0, (menu_w - 6) // 2, " PAUSE ", curses.color_pair(5) | curses.A_BOLD)
         opts = ["1. Resume", "2. Main Menu", "3. Quit"]
-        for i, o in enumerate(opts): win.addstr(2+i, 2, o, curses.color_pair(6))
-        win.addstr(menu_h-2, 2, " Select (1-3) ", curses.color_pair(5))
+        for i, o in enumerate(opts):
+            win.addstr(2 + i, 2, o, curses.color_pair(6))
+        win.addstr(menu_h - 2, 2, " Select (1-3) ", curses.color_pair(5))
         win.refresh()
         
         key = win.getch()
-        if key == ord('1'): self.show_menu = False
+        if key == ord('1'):
+            self.show_menu = False
         elif key == ord('2'): 
             self.show_menu = False
             self.show_main_menu = True
-        elif key == ord('3'): self.running = False
+        elif key == ord('3'):
+            self.running = False
 
-    def reset_test(self):
+    def reset_test(self) -> None:
+        """Reset the typing test with new text."""
         self.text = get_random_words(self.target_count, self.word_bank, self.smart_mode)
         self.user_input = ""
         self.start_time = None
@@ -542,38 +611,53 @@ class TypingApp:
         self.errors = 0
         self.total_chars_typed = 0
 
-    def get_accuracy(self):
-        if len(self.user_input) == 0: return 100.0
+    def get_accuracy(self) -> float:
+        """Calculate typing accuracy as a percentage."""
+        if len(self.user_input) == 0:
+            return 100.0
         correct = sum(1 for i, c in enumerate(self.user_input) if i < len(self.text) and c == self.text[i])
         return (correct / len(self.user_input)) * 100
 
-    def draw_results(self, row, width):
-        elapsed = 0
-        if self.start_time and self.end_time: elapsed = self.end_time - self.start_time
-        wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0)) if elapsed > 0 else 0
+    def draw_results(self, row: int, width: int) -> None:
+        """Draw the results screen after test completion."""
+        elapsed = 0.0
+        if self.start_time and self.end_time:
+            elapsed = self.end_time - self.start_time
+        
+        # Avoid division by zero
+        if elapsed > 0:
+            wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0))
+        else:
+            wpm = 0
+        
         acc = self.get_accuracy()
         
         try:
-            self.stdscr.addstr(row, (width - 9) // 2, " RESULTS ", curses.color_pair(5) | curses.A_BOLD)
-        except: pass
+            self.stdscr.addstr(row, max(0, (width - 9) // 2), " RESULTS ", curses.color_pair(5) | curses.A_BOLD)
+        except curses.error:
+            pass
 
         minimal = self.config.get("minimal_stats", False)
-        stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% " if minimal else f" WPM: {wpm} | Accuracy: {acc:.1f}% | Errors: {self.errors} | Time: {elapsed:.1f}s "
+        if minimal:
+            stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% "
+        else:
+            stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% | Errors: {self.errors} | Time: {elapsed:.1f}s "
         
         try:
             self.stdscr.addstr(row + 2, 2, stats, curses.color_pair(1) | curses.A_BOLD)
             self.stdscr.addstr(row + 4, 2, " Enter: Retry | M: Scores | Esc: Menu ", curses.color_pair(5) | curses.A_DIM)
-        except: pass
+        except curses.error:
+            pass
 
-    def handle_input(self, key):
-        if self.show_main_menu: return # Handled in draw_main_menu
-
-        if self.show_menu: return # Handled in draw_submenu
+    def handle_input(self, key: int) -> None:
+        """Handle keyboard input for typing and navigation."""
+        if self.show_main_menu or self.show_menu:
+            return  # Handled in respective draw methods
 
         if self.finished:
-            if key == 10 or key == curses.KEY_ENTER:
+            if key in (10, curses.KEY_ENTER):
                 self.reset_test()
-            elif key == ord('m') or key == ord('M'):
+            elif key in (ord('m'), ord('M')):
                 self.show_highscores()
             elif key == 27:
                 self.show_menu = True
@@ -583,9 +667,9 @@ class TypingApp:
             self.show_menu = True
             return
 
-        if self.mode == 'zen' and (key == 10 or key == curses.KEY_ENTER or key == 343): 
-             self.finish_test()
-             return
+        if self.mode == 'zen' and key in (10, curses.KEY_ENTER, 343):
+            self.finish_test()
+            return
 
         if key in (curses.KEY_BACKSPACE, 127, 8):
             if self.cursor_pos > 0:
@@ -593,9 +677,11 @@ class TypingApp:
                 if len(self.user_input) > 0:
                     self.user_input = self.user_input[:-1]
         elif key == curses.KEY_LEFT:
-            if self.cursor_pos > 0: self.cursor_pos -= 1
+            if self.cursor_pos > 0:
+                self.cursor_pos -= 1
         elif key == curses.KEY_RIGHT:
-            if self.cursor_pos < len(self.text): self.cursor_pos += 1
+            if self.cursor_pos < len(self.text):
+                self.cursor_pos += 1
         elif 32 <= key <= 126:
             if self.cursor_pos < len(self.text):
                 char = chr(key)
@@ -603,13 +689,13 @@ class TypingApp:
                     self.user_input += char
                 else:
                     if self.cursor_pos < len(self.user_input):
-                         self.user_input = self.user_input[:self.cursor_pos] + char + self.user_input[self.cursor_pos+1:]
+                        self.user_input = self.user_input[:self.cursor_pos] + char + self.user_input[self.cursor_pos + 1:]
                     else:
-                         self.user_input += char
+                        self.user_input += char
                 
                 if self.cursor_pos < len(self.text):
                     if self.user_input[self.cursor_pos] != self.text[self.cursor_pos]:
-                         self.errors += 1
+                        self.errors += 1
                     
                 self.cursor_pos += 1
                 self.total_chars_typed += 1
@@ -617,27 +703,36 @@ class TypingApp:
                 if self.cursor_pos == len(self.text):
                     self.finish_test()
         
+        # Start timer on first keystroke
         if not self.finished and self.start_time is None and len(self.user_input) > 0:
             self.start_time = time.time()
 
-    def finish_test(self):
+    def finish_test(self) -> None:
+        """Mark test as finished and save score."""
         if not self.finished:
             self.finished = True
             self.end_time = time.time()
             self.save_score()
 
-    def save_score(self):
-        elapsed = self.end_time - self.start_time if self.end_time and self.start_time else 0
-        wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0)) if elapsed > 0 else 0
+    def save_score(self) -> None:
+        """Save the current test score to the scores file."""
+        elapsed = self.end_time - self.start_time if self.end_time and self.start_time else 0.0
+        
+        # Avoid division by zero
+        if elapsed > 0:
+            wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0))
+        else:
+            wpm = 0
+        
         acc = self.get_accuracy()
         
-        score_entry = {
+        score_entry: Dict[str, Any] = {
             "date": time.strftime("%Y-%m-%d %H:%M"),
             "mode": self.mode,
             "word_bank": self.word_bank,
             "smart": self.smart_mode,
             "wpm": wpm,
-            "accuracy": acc,
+            "accuracy": round(acc, 1),
             "errors": self.errors,
             "chars": len(self.user_input)
         }
@@ -645,35 +740,40 @@ class TypingApp:
         scores = load_scores()
         scores.append(score_entry)
         scores.sort(key=lambda x: x['wpm'], reverse=True)
-        save_scores(scores[:100])
+        save_scores(scores[:MAX_HISTORY_SIZE])
 
-    def show_highscores(self):
+    def show_highscores(self) -> None:
+        """Display the high scores screen."""
         scores = load_scores()
         self.stdscr.clear()
         h, w = self.stdscr.getmaxyx()
         
-        self.stdscr.addstr(2, (w-13)//2, " HIGH SCORES ", curses.color_pair(5) | curses.A_BOLD)
+        self.stdscr.addstr(2, max(0, (w - 13) // 2), " HIGH SCORES ", curses.color_pair(5) | curses.A_BOLD)
         
         if not scores:
             self.stdscr.addstr(5, 5, "No scores recorded yet.", curses.color_pair(4))
         else:
             self.stdscr.addstr(4, 5, "Date       Mode    WPM  Acc%   Bank", curses.color_pair(5))
-            for i, s in enumerate(scores[:15]):
+            for i, s in enumerate(scores[:MAX_HIGHSCORES_DISPLAY]):
                 bank = s.get('word_bank', 'N/A')
-                if s.get('smart'): bank += " (Smart)"
+                if s.get('smart'):
+                    bank += " (Smart)"
                 line = f"{s['date']} {s['mode']:<6} {s['wpm']:>3} {s['accuracy']:>5.1f}   {bank}"
                 try:
                     self.stdscr.addstr(6 + i, 5, line, curses.color_pair(1 if i == 0 else 4))
-                except: pass
+                except curses.error:
+                    pass
         
-        self.stdscr.addstr(h-2, 2, " Press Enter to close ", curses.color_pair(5) | curses.A_DIM)
+        self.stdscr.addstr(h - 2, 2, " Press Enter to close ", curses.color_pair(5) | curses.A_DIM)
         self.stdscr.refresh()
         
         while True:
             k = self.stdscr.getch()
-            if k == 10 or k == curses.KEY_ENTER: break
+            if k in (10, curses.KEY_ENTER):
+                break
 
-    def run(self):
+    def run(self) -> None:
+        """Main application loop."""
         curses.curs_set(0)
         self.stdscr.nodelay(True)
         # Start with Main Menu
@@ -690,7 +790,8 @@ class TypingApp:
         
         curses.curs_set(1)
 
-def main_cli(stdscr, args):
+def main_cli(stdscr, args) -> None:
+    """Main CLI entry point."""
     ensure_config()
     
     if args.command == 'secret':
@@ -699,14 +800,25 @@ def main_cli(stdscr, args):
 
     # If launched via CLI with args, skip main menu
     if args.command == 'start':
-        app = TypingApp(stdscr, mode=args.mode, target_count=args.count, word_bank=args.bank)
+        # Validate count argument
+        count = max(MIN_WORD_COUNT, min(MAX_WORD_COUNT, args.count))
+        app = TypingApp(stdscr, mode=args.mode, target_count=count, word_bank=args.bank)
         app.show_main_menu = False
         app.run()
     else:
         # Default launch (double click) -> Main Menu
         config = load_config()
-        app = TypingApp(stdscr, mode=config.get('default_mode', 'rand'), target_count=config.get('default_count', 25), word_bank=config.get('word_bank', 'common'))
+        default_count = config.get('default_count', DEFAULT_WORD_COUNT)
+        # Ensure default count is within bounds
+        default_count = max(MIN_WORD_COUNT, min(MAX_WORD_COUNT, default_count))
+        app = TypingApp(
+            stdscr, 
+            mode=config.get('default_mode', 'rand'), 
+            target_count=default_count, 
+            word_bank=config.get('word_bank', 'common')
+        )
         app.run()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scribere Typing Tutor")
@@ -714,7 +826,7 @@ if __name__ == "__main__":
     
     start_parser = subparsers.add_parser('start', help='Start a typing test')
     start_parser.add_argument('mode', choices=['rand', 'zen'], help='Test mode')
-    start_parser.add_argument('--count', '-c', type=int, default=25, help='Number of words')
+    start_parser.add_argument('--count', '-c', type=int, default=DEFAULT_WORD_COUNT, help=f'Number of words ({MIN_WORD_COUNT}-{MAX_WORD_COUNT})')
     start_parser.add_argument('--bank', '-b', choices=['common', 'complex'], default='common', help='Word bank')
     
     subparsers.add_parser('secret', help='Secret Easter Egg')
