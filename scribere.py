@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Scribere - A hyper-minimalist terminal typing tutor.
-License: GNU GPL v3
-"""
-
 import curses
 import random
 import time
@@ -60,7 +53,6 @@ BASE_WORDS = [
     "serious", "busy", "free", "early", "late", "soon", "never", "always", "often", "sometimes",
     "here", "there", "everywhere", "nowhere", "somewhere", "inside", "outside", "above", "below", "between",
     "before", "behind", "next", "last", "first", "second", "third", "fourth", "fifth", "tenth",
-    # Extra flavor words
     "dig", "wish", "send", "folk", "musician", "music", "rock", "pop", "jazz", "electronic",
     "man", "cost", "talking", "shop", "fly", "european", "african", "asian", "balkan",
     "meme", "liquid", "tiny", "large", "kid", "silly", "wise", "lost", "half",
@@ -69,15 +61,15 @@ BASE_WORDS = [
     "miller", "care", "game", "sound"
 ]
 
-# Weighted list: Common words appear multiple times to increase frequency
+# Weighted list: Common words appear multiple times
 COMMON_WORDS = []
 for word in BASE_WORDS:
     if word in ["the", "be", "to", "of", "and", "a", "in", "that", "have", "it", "for", "on", "with", "he", "as", "you", "do", "at"]:
-        COMMON_WORDS.extend([word] * 8)  # Very high frequency
+        COMMON_WORDS.extend([word] * 8)
     elif word in ["this", "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all"]:
-        COMMON_WORDS.extend([word] * 5)  # High frequency
+        COMMON_WORDS.extend([word] * 5)
     else:
-        COMMON_WORDS.append(word)        # Normal frequency
+        COMMON_WORDS.append(word)
 
 COMPLEX_WORDS = [
     "phallus", "beryllium", "doctorate", "ephemeral", "quintessential", "serendipity", "ubiquitous",
@@ -111,7 +103,6 @@ COMPLEX_WORDS = [
     "jazz", "blues", "rock", "pop", "folk", "classical", "electronic", "hiphop", "reggae", "country"
 ]
 
-# Smart Sentence Templates
 TEMPLATES = [
     "{noun} {verb} {adj} {noun}.",
     "The {adj} {noun} {verb} {adv}.",
@@ -151,7 +142,9 @@ def ensure_config():
             "color_theme": "default",
             "minimal_stats": False,
             "word_bank": "common",
-            "smart_sentences": False
+            "smart_sentences": False,
+            "default_mode": "rand",
+            "default_count": 25
         }
         with open(CONFIG_FILE, 'w') as f:
             json.dump(default_config, f)
@@ -164,7 +157,7 @@ def load_config():
         with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
     except:
-        return {"word_bank": "common", "smart_sentences": False, "minimal_stats": False}
+        return {"word_bank": "common", "smart_sentences": False, "minimal_stats": False, "default_mode": "rand", "default_count": 25}
 
 def save_config(config):
     with open(CONFIG_FILE, 'w') as f:
@@ -201,7 +194,7 @@ def get_random_words(count, word_bank="common", smart=False):
     else:
         return " ".join(random.choice(source) for _ in range(count))
 
-# --- Easter Egg Logic (Fixed) ---
+# --- Easter Egg Logic ---
 
 def fetch_and_convert_image(url):
     if not PIL_AVAILABLE:
@@ -215,134 +208,83 @@ def fetch_and_convert_image(url):
         img = Image.open(io.BytesIO(img_data))
         
         # Get terminal size
-        # We will calculate this dynamically in the display function, 
-        # but here we prepare a high-res version to be scaled later if needed.
-        # For now, we just return the image object to be processed per-frame or once.
-        return img
+        h_term, w_term = os.get_terminal_size()
+        # Calculate max usable size (leave some margin)
+        max_w = w_term - 4
+        max_h = h_term - 4
         
+        # Resize image maintaining aspect ratio (chars are ~2x taller than wide)
+        aspect = img.width / img.height
+        new_w = max_w
+        new_h = int(new_w / aspect * 0.5)
+        
+        if new_h > max_h:
+            new_h = max_h
+            new_w = int(new_h * aspect)
+            
+        img = img.convert('L').resize((new_w, new_h), Image.Resampling.LANCZOS)
+        
+        pixels = list(img.getdata())
+        # Binary blocks for high contrast
+        chars = "█ " 
+        
+        ascii_lines = []
+        for i in range(new_h):
+            line = ""
+            for j in range(new_w):
+                pixel = pixels[i * new_w + j]
+                # Threshold at 128
+                char_idx = 0 if pixel < 128 else 1
+                line += chars[char_idx]
+            ascii_lines.append(line)
+        
+        return ascii_lines
     except Exception as e:
-        return None
-
-def render_ascii_frame(stdscr, img):
-    h_term, w_term = stdscr.getmaxyx()
-    
-    # Calculate max available area (leave some padding)
-    max_h = h_term - 4
-    max_w = w_term - 4
-    
-    if max_h <= 0 or max_w <= 0:
-        return
-
-    # Terminal characters are roughly twice as tall as they are wide.
-    # To prevent stretching, we scale height by 0.5 relative to width.
-    aspect_ratio = img.width / img.height
-    new_w = max_w
-    new_h = int(max_w / aspect_ratio * 0.55) # 0.55 compensates for char aspect ratio
-    
-    if new_h > max_h:
-        new_h = max_h
-        new_w = int(max_h * aspect_ratio / 0.55)
-
-    # Resize image to fit terminal
-    img_resized = img.convert('L').resize((new_w, new_h), Image.Resampling.LANCZOS)
-    
-    pixels = list(img_resized.getdata())
-    
-    # Binary threshold for sharp contrast (Smiling picture style)
-    threshold = 128 
-    
-    lines = []
-    for i in range(new_h):
-        line = ""
-        for j in range(new_w):
-            pixel = pixels[i * new_w + j]
-            if pixel < threshold:
-                line += "█" # Dark pixel
-            else:
-                line += " " # Light pixel
-        lines.append(line)
-    
-    # Center and draw
-    start_y = (h_term - len(lines)) // 2
-    start_x = (w_term - len(lines[0])) // 2 if lines else 0
-    
-    for i, line in enumerate(lines):
-        y = start_y + i
-        x = start_x
-        if 0 <= y < h_term:
-            try:
-                # Draw the line. Since it's mixed chars, we just addstr.
-                # We truncate if line is too long for window
-                safe_line = line[:w_term-1]
-                stdscr.addstr(y, max(0, x), safe_line, curses.A_BOLD)
-            except curses.error:
-                pass
+        return [f"Error loading image: {str(e)}", "Check internet connection."]
 
 def show_secret_screen(stdscr):
     stdscr.clear()
     stdscr.nodelay(False)
     curses.curs_set(0)
-    curses.start_color()
-    curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_WHITE, -1)
-    curses.init_pair(2, curses.COLOR_YELLOW, -1)
     
     h, w = stdscr.getmaxyx()
     
-    title = " "
+    title = " SECRET FOUND "
+    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
     try:
-        stdscr.addstr(0, (w - len(title)) // 2, title, curses.color_pair(2) | curses.A_BOLD)
+        stdscr.addstr(0, (w - len(title)) // 2, title)
     except: pass
+    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
     
-    stdscr.addstr(h-2, 2, " Loading image... ", curses.color_pair(1))
-    stdscr.refresh()
+    lines = fetch_and_convert_image("https://f4.bcbits.com/img/a1664460568_10.jpg")
     
-    img = fetch_and_convert_image("https://f4.bcbits.com/img/a1664460568_10.jpg")
-    
-    if img is None:
-        stdscr.clear()
-        stdscr.addstr(h//2, (w-40)//2, "Failed to load image. Check internet/Pillow.", curses.color_pair(2))
-        stdscr.getch()
-        return
-
-    # Render loop to handle resize or just static display
-    while True:
-        stdscr.erase()
-        try:
-            stdscr.addstr(0, (w - len(title)) // 2, title, curses.color_pair(2) | curses.A_BOLD)
-        except: pass
-        
-        render_ascii_frame(stdscr, img)
-        
-        msg = " Press any key to exit "
-        try:
-            stdscr.addstr(h-2, (w - len(msg)) // 2, msg, curses.color_pair(1) | curses.A_DIM)
-        except: pass
-        
-        stdscr.refresh()
-        
-        # Non-blocking check for key, but allow a moment to render
-        stdscr.timeout(100)
-        key = stdscr.getch()
-        if key != -1:
+    start_y = 2
+    for i, line in enumerate(lines):
+        if start_y + i >= h - 2:
             break
-        # Update terminal size in case of resize
-        h, w = stdscr.getmaxyx()
+        x_pos = max(0, (w - len(line)) // 2)
+        try:
+            stdscr.addstr(start_y + i, x_pos, line, curses.color_pair(1) | curses.A_BOLD)
+        except: pass
+    
+    msg = " Press any key to return "
+    try:
+        stdscr.addstr(h - 2, (w - len(msg)) // 2, msg, curses.color_pair(5) | curses.A_DIM)
+    except: pass
+    stdscr.refresh()
+    stdscr.getch()
 
 # --- Application Logic ---
 
 class TypingApp:
-    def __init__(self, stdscr, mode, target_count=25, word_bank="common"):
+    def __init__(self, stdscr, mode='rand', target_count=25, word_bank="common"):
         self.stdscr = stdscr
-        self.mode = mode 
+        self.mode = mode
         self.target_count = target_count
         self.word_bank = word_bank
         self.config = load_config()
         
-        if self.config.get("smart_sentences", False):
-            self.smart_mode = True
-        else:
-            self.smart_mode = False
+        self.smart_mode = self.config.get("smart_sentences", False)
             
         self.text = ""
         self.user_input = ""
@@ -353,6 +295,7 @@ class TypingApp:
         self.errors = 0
         self.total_chars_typed = 0
         self.show_menu = False
+        self.show_main_menu = False
         
         curses.start_color()
         curses.use_default_colors()
@@ -374,9 +317,102 @@ class TypingApp:
         if not self.text:
             self.text = "Error loading text."
 
+    def draw_main_menu(self):
+        h, w = self.stdscr.getmaxyx()
+        self.stdscr.erase()
+        
+        # Main Menu Box
+        menu_h, menu_w = 14, 60
+        start_y, start_x = (h - menu_h) // 2, (w - menu_w) // 2
+        
+        win = curses.newwin(menu_h, menu_w, start_y, start_x)
+        win.box()
+        win.keypad(True)
+        
+        title = " SCRIBERE MAIN MENU "
+        win.addstr(0, (menu_w - len(title)) // 2, title, curses.color_pair(5) | curses.A_BOLD)
+        
+        options = [
+            f"1. Start Random ({self.target_count} words)",
+            f"2. Start Zen Mode ({self.target_count} words)",
+            "3. Toggle Word Bank (Common/Complex)",
+            "4. Toggle Smart Sentences",
+            "5. Set Word Count",
+            "6. View High Scores",
+            "7. Secret",
+            "8. Quit"
+        ]
+        
+        for i, opt in enumerate(options):
+            win.addstr(2 + i, 2, opt, curses.color_pair(6))
+        
+        status = f" Current: {self.word_bank.upper()} | Smart: {'ON' if self.smart_mode else 'OFF'} "
+        win.addstr(menu_h - 2, 2, status, curses.color_pair(5) | curses.A_DIM)
+        win.addstr(menu_h - 3, 2, " Select (1-8) ", curses.color_pair(5) | curses.A_DIM)
+        win.refresh()
+        
+        while True:
+            key = win.getch()
+            if key == ord('1'):
+                self.mode = 'rand'
+                self.show_main_menu = False
+                self.reset_test()
+                break
+            elif key == ord('2'):
+                self.mode = 'zen'
+                self.show_main_menu = False
+                self.reset_test()
+                break
+            elif key == ord('3'):
+                self.config["word_bank"] = "complex" if self.config.get("word_bank") == "common" else "common"
+                save_config(self.config)
+                self.word_bank = self.config["word_bank"]
+                self.draw_main_menu() # Redraw to update status
+                break
+            elif key == ord('4'):
+                self.config["smart_sentences"] = not self.config.get("smart_sentences", False)
+                save_config(self.config)
+                self.smart_mode = self.config["smart_sentences"]
+                self.draw_main_menu()
+                break
+            elif key == ord('5'):
+                # Simple input for count
+                curses.echo()
+                win.addstr(menu_h - 2, 2, " Enter word count: ")
+                win.refresh()
+                try:
+                    input_str = win.getstr(menu_h - 2, 22, 3).decode('utf-8')
+                    if input_str.isdigit():
+                        self.target_count = int(input_str)
+                        self.config["default_count"] = self.target_count
+                        save_config(self.config)
+                except: pass
+                curses.noecho()
+                self.draw_main_menu()
+                break
+            elif key == ord('6'):
+                self.show_main_menu = False
+                self.show_highscores()
+                self.show_main_menu = True # Return to menu after scores
+                self.draw_main_menu()
+                break
+            elif key == ord('7'):
+                self.show_main_menu = False
+                show_secret_screen(self.stdscr)
+                self.show_main_menu = True
+                self.draw_main_menu()
+                break
+            elif key == ord('8') or key == 27:
+                self.running = False
+                break
+
     def draw_screen(self):
+        if self.show_main_menu:
+            self.draw_main_menu()
+            return
+            
         if self.show_menu:
-            self.draw_menu()
+            self.draw_submenu()
             return
 
         self.stdscr.erase()
@@ -476,61 +512,25 @@ class TypingApp:
         
         self.stdscr.refresh()
 
-    def draw_menu(self):
+    def draw_submenu(self):
         h, w = self.stdscr.getmaxyx()
         self.stdscr.erase()
-        
-        menu_h, menu_w = 12, 50
+        menu_h, menu_w = 10, 40
         start_y, start_x = (h - menu_h) // 2, (w - menu_w) // 2
-        
         win = curses.newwin(menu_h, menu_w, start_y, start_x)
         win.box()
-        win.keypad(True)
-        
-        title = " MENU "
-        win.addstr(0, (menu_w - len(title)) // 2, title, curses.color_pair(5) | curses.A_BOLD)
-        
-        options = [
-            "1. Toggle Smart Sentences",
-            "2. Change Word Bank (Common/Complex)",
-            "3. Toggle Minimal Stats",
-            "4. Resume Test",
-            "5. Quit App"
-        ]
-        
-        for i, opt in enumerate(options):
-            win.addstr(2 + i, 2, opt, curses.color_pair(6))
-        
-        win.addstr(menu_h - 2, 2, " Select (1-5) or Esc to close ", curses.color_pair(5) | curses.A_DIM)
+        win.addstr(0, (menu_w - 6) // 2, " PAUSE ", curses.color_pair(5) | curses.A_BOLD)
+        opts = ["1. Resume", "2. Main Menu", "3. Quit"]
+        for i, o in enumerate(opts): win.addstr(2+i, 2, o, curses.color_pair(6))
+        win.addstr(menu_h-2, 2, " Select (1-3) ", curses.color_pair(5))
         win.refresh()
         
-        while True:
-            key = win.getch()
-            if key == 27 or key == ord('q'):
-                self.show_menu = False
-                break
-            elif key == ord('1'):
-                self.config["smart_sentences"] = not self.config.get("smart_sentences", False)
-                save_config(self.config)
-                self.smart_mode = self.config["smart_sentences"]
-                self.reset_test()
-                break
-            elif key == ord('2'):
-                self.config["word_bank"] = "complex" if self.config.get("word_bank") == "common" else "common"
-                save_config(self.config)
-                self.word_bank = self.config["word_bank"]
-                self.reset_test()
-                break
-            elif key == ord('3'):
-                self.config["minimal_stats"] = not self.config.get("minimal_stats", False)
-                save_config(self.config)
-                break
-            elif key == ord('4'):
-                self.show_menu = False
-                break
-            elif key == ord('5'):
-                self.running = False
-                break
+        key = win.getch()
+        if key == ord('1'): self.show_menu = False
+        elif key == ord('2'): 
+            self.show_menu = False
+            self.show_main_menu = True
+        elif key == ord('3'): self.running = False
 
     def reset_test(self):
         self.text = get_random_words(self.target_count, self.word_bank, self.smart_mode)
@@ -543,57 +543,38 @@ class TypingApp:
         self.total_chars_typed = 0
 
     def get_accuracy(self):
-        if len(self.user_input) == 0:
-            return 100.0
+        if len(self.user_input) == 0: return 100.0
         correct = sum(1 for i, c in enumerate(self.user_input) if i < len(self.text) and c == self.text[i])
         return (correct / len(self.user_input)) * 100
 
     def draw_results(self, row, width):
         elapsed = 0
-        if self.start_time and self.end_time:
-            elapsed = self.end_time - self.start_time
-        
-        wpm = 0
-        if elapsed > 0:
-            wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0))
-        
+        if self.start_time and self.end_time: elapsed = self.end_time - self.start_time
+        wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0)) if elapsed > 0 else 0
         acc = self.get_accuracy()
         
-        res_title = " RESULTS "
-        start_x = (width - len(res_title)) // 2
         try:
-            self.stdscr.addstr(row, start_x, res_title, curses.color_pair(5) | curses.A_BOLD)
+            self.stdscr.addstr(row, (width - 9) // 2, " RESULTS ", curses.color_pair(5) | curses.A_BOLD)
         except: pass
 
         minimal = self.config.get("minimal_stats", False)
-        
-        if minimal:
-            stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% "
-        else:
-            stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% | Errors: {self.errors} | Chars: {len(self.user_input)} | Time: {elapsed:.1f}s "
+        stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% " if minimal else f" WPM: {wpm} | Accuracy: {acc:.1f}% | Errors: {self.errors} | Time: {elapsed:.1f}s "
         
         try:
             self.stdscr.addstr(row + 2, 2, stats, curses.color_pair(1) | curses.A_BOLD)
-        except: pass
-            
-        hint = " Enter: New Test | M: Scores | D: Toggle Stats | Esc: Menu "
-        try:
-            self.stdscr.addstr(row + 4, 2, hint, curses.color_pair(5) | curses.A_DIM)
+            self.stdscr.addstr(row + 4, 2, " Enter: Retry | M: Scores | Esc: Menu ", curses.color_pair(5) | curses.A_DIM)
         except: pass
 
     def handle_input(self, key):
-        if self.show_menu:
-            self.show_menu = False
-            return
+        if self.show_main_menu: return # Handled in draw_main_menu
+
+        if self.show_menu: return # Handled in draw_submenu
 
         if self.finished:
             if key == 10 or key == curses.KEY_ENTER:
                 self.reset_test()
             elif key == ord('m') or key == ord('M'):
                 self.show_highscores()
-            elif key == ord('d') or key == ord('D'):
-                self.config["minimal_stats"] = not self.config.get("minimal_stats", False)
-                save_config(self.config)
             elif key == 27:
                 self.show_menu = True
             return
@@ -606,17 +587,15 @@ class TypingApp:
              self.finish_test()
              return
 
-        if key == curses.KEY_BACKSPACE or key == 127 or key == 8:
+        if key in (curses.KEY_BACKSPACE, 127, 8):
             if self.cursor_pos > 0:
                 self.cursor_pos -= 1
                 if len(self.user_input) > 0:
                     self.user_input = self.user_input[:-1]
         elif key == curses.KEY_LEFT:
-            if self.cursor_pos > 0:
-                self.cursor_pos -= 1
+            if self.cursor_pos > 0: self.cursor_pos -= 1
         elif key == curses.KEY_RIGHT:
-            if self.cursor_pos < len(self.text):
-                self.cursor_pos += 1
+            if self.cursor_pos < len(self.text): self.cursor_pos += 1
         elif 32 <= key <= 126:
             if self.cursor_pos < len(self.text):
                 char = chr(key)
@@ -673,8 +652,7 @@ class TypingApp:
         self.stdscr.clear()
         h, w = self.stdscr.getmaxyx()
         
-        title = " HIGH SCORES "
-        self.stdscr.addstr(2, (w-len(title))//2, title, curses.color_pair(5) | curses.A_BOLD)
+        self.stdscr.addstr(2, (w-13)//2, " HIGH SCORES ", curses.color_pair(5) | curses.A_BOLD)
         
         if not scores:
             self.stdscr.addstr(5, 5, "No scores recorded yet.", curses.color_pair(4))
@@ -693,18 +671,19 @@ class TypingApp:
         
         while True:
             k = self.stdscr.getch()
-            if k == 10 or k == curses.KEY_ENTER:
-                break
+            if k == 10 or k == curses.KEY_ENTER: break
 
     def run(self):
         curses.curs_set(0)
         self.stdscr.nodelay(True)
+        # Start with Main Menu
+        self.show_main_menu = True
         
         while self.running:
             self.draw_screen()
             try:
                 key = self.stdscr.getch()
-                if key != -1:
+                if key != -1 and not self.show_main_menu and not self.show_menu:
                     self.handle_input(key)
             except KeyboardInterrupt:
                 break
@@ -718,12 +697,16 @@ def main_cli(stdscr, args):
         show_secret_screen(stdscr)
         return
 
-    mode = args.mode
-    word_bank = args.bank
-    target = args.count
-    
-    app = TypingApp(stdscr, mode, target_count=target, word_bank=word_bank)
-    app.run()
+    # If launched via CLI with args, skip main menu
+    if args.command == 'start':
+        app = TypingApp(stdscr, mode=args.mode, target_count=args.count, word_bank=args.bank)
+        app.show_main_menu = False
+        app.run()
+    else:
+        # Default launch (double click) -> Main Menu
+        config = load_config()
+        app = TypingApp(stdscr, mode=config.get('default_mode', 'rand'), target_count=config.get('default_count', 25), word_bank=config.get('word_bank', 'common'))
+        app.run()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scribere Typing Tutor")
@@ -748,12 +731,7 @@ if __name__ == "__main__":
     elif args.command == 'start':
         pass
     else:
-        class DefaultArgs:
-            command = 'start'
-            mode = 'rand'
-            count = 25
-            bank = 'common'
-        args = DefaultArgs()
+        args.command = 'default'
 
     try:
         curses.wrapper(lambda stdscr: main_cli(stdscr, args))
