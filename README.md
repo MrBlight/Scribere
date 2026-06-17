@@ -1,27 +1,22 @@
 # Scribere
 
-A hyper-minimalist terminal typing tutor designed for focus, flow, and perfection with no distractions. Inspired by MonkeyType.
+A hyper-minimalist terminal typing tutor
 
 ## Features
 
-- **Pure Focus**: Cool, clean, and bordered interface.
-- **Smart Quotes**: Currently 286+ quotes from Literature, Science, Philosophy, and Tech.
-- **Length Control**: Choose `short`, `medium`, `long`, or `longest` quotes.
-- **Zen Mode**: Distraction-free typing. Press `Shift+Enter` (or just `Enter` depending on terminal) to finish.
-- **High Scores**: Persistent local leaderboard with filtering.
-- **Cross-Platform**: Works on Linux, macOS, Windows, BSD. (I think.)
-
-## Controls
-
-- **Type**: Characters turn **Blue** when correct, **Red** when wrong.
-- **Backspace**: Correct mistakes.
-- **ESC**: Quit immediately.
-- **Enter**: Finish test (in Zen mode) or View Results.
-- **M**: Toggle High Scores menu.
-- **D**: Toggle Detailed/Minimal stats.
+- **Pure Focus**: Clean and bordered interface without clutter.
+- **Smart Generation**: Random words weighted by frequency OR smart pseudo-sentences.
+- **Word Banks**: Choose between `common` (everyday words) or `complex` (technical/rare).
+- **Zen Mode**: Distraction-free typing. Press Enter to finish.
+- **In-App Menu**: Press `Esc` anytime to change settings without restarting.
+- **High Scores**: Persistent local leaderboard.
+- **Cross-Platform**: Linux, macOS, Windows, BSD.
 
 ## Installation
 
-No special installation required. Just clone or download.
-
-> Program is licensed **GNU GPL v3** btw.
+1. Clone or download the repository.
+2. Install one dep:
+   ```bash
+   pip install Pillow
+   
+> Program is licensed **GNU GPL v3**
