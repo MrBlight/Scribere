@@ -73,11 +73,11 @@ BASE_WORDS = [
 COMMON_WORDS = []
 for word in BASE_WORDS:
     if word in ["the", "be", "to", "of", "and", "a", "in", "that", "have", "it", "for", "on", "with", "he", "as", "you", "do", "at"]:
-        COMMON_WORDS.extend([word] * 8)  # Very high frequency
+        COMMON_WORDS.extend([word] * 8)
     elif word in ["this", "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all"]:
-        COMMON_WORDS.extend([word] * 5)  # High frequency
+        COMMON_WORDS.extend([word] * 5)
     else:
-        COMMON_WORDS.append(word)        # Normal frequency
+        COMMON_WORDS.append(word)
 
 COMPLEX_WORDS = [
     "phallus", "beryllium", "doctorate", "ephemeral", "quintessential", "serendipity", "ubiquitous",
@@ -136,7 +136,7 @@ TEMPLATES = [
 ]
 
 TEMPLATE_FILLERS = {
-    "noun": BASE_WORDS[:50], # Use common nouns roughly
+    "noun": BASE_WORDS[:50],
     "verb": ["run", "jump", "eat", "sleep", "walk", "talk", "see", "hear", "feel", "think", "make", "take", "go", "come", "work", "play", "live", "love", "hate", "fight"],
     "adj": ["big", "small", "red", "blue", "green", "fast", "slow", "hot", "cold", "good", "bad", "new", "old", "high", "low", "bright", "dark", "happy", "sad", "wise"],
     "adv": ["quickly", "slowly", "loudly", "quietly", "happily", "sadly", "well", "badly", "very", "too"],
@@ -196,7 +196,6 @@ def get_random_words(count, word_bank="common", smart=False):
                 sentence = sentence.replace("{" + key + "}", random.choice(TEMPLATE_FILLERS[key]))
             sentences.append(sentence)
         result = " ".join(sentences)
-        # Trim to exact count roughly
         words = result.split()[:count]
         return " ".join(words)
     else:
@@ -214,9 +213,6 @@ def fetch_and_convert_image(url):
         img_data = response.read()
         
         img = Image.open(io.BytesIO(img_data))
-        
-        # Convert to grayscale and resize to fit terminal
-        # Approximate terminal width 80, height 40, aspect ratio ~2:1 for chars
         width = 80
         height = int(width * (img.height / img.width) * 0.5)
         img = img.convert('L').resize((width, height), Image.Resampling.LANCZOS)
@@ -255,7 +251,6 @@ def show_secret_screen(stdscr):
     for i, line in enumerate(lines):
         if start_y + i >= h - 2:
             break
-        # Center the line
         x_pos = max(0, (w - len(line)) // 2)
         try:
             stdscr.addstr(start_y + i, x_pos, line, curses.color_pair(1))
@@ -272,12 +267,11 @@ def show_secret_screen(stdscr):
 class TypingApp:
     def __init__(self, stdscr, mode, target_count=25, word_bank="common"):
         self.stdscr = stdscr
-        self.mode = mode # 'rand', 'zen'
+        self.mode = mode
         self.target_count = target_count
         self.word_bank = word_bank
         self.config = load_config()
         
-        # Apply config overrides
         if self.config.get("smart_sentences", False):
             self.smart_mode = True
         else:
@@ -293,15 +287,14 @@ class TypingApp:
         self.total_chars_typed = 0
         self.show_menu = False
         
-        # Initialize colors
         curses.start_color()
         curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_BLUE, -1)   # Correct
-        curses.init_pair(2, curses.COLOR_RED, -1)    # Error
-        curses.init_pair(3, curses.COLOR_GREEN, -1)  # Cursor highlight
-        curses.init_pair(4, curses.COLOR_WHITE, -1)  # Untyped
-        curses.init_pair(5, curses.COLOR_YELLOW, -1) # UI Borders
-        curses.init_pair(6, curses.COLOR_CYAN, -1)   # Menu Highlight
+        curses.init_pair(1, curses.COLOR_BLUE, -1)
+        curses.init_pair(2, curses.COLOR_RED, -1)
+        curses.init_pair(3, curses.COLOR_GREEN, -1)
+        curses.init_pair(4, curses.COLOR_WHITE, -1)
+        curses.init_pair(5, curses.COLOR_YELLOW, -1)
+        curses.init_pair(6, curses.COLOR_CYAN, -1)
         
         self.setup_text()
         self.running = True
@@ -311,7 +304,6 @@ class TypingApp:
             self.text = get_random_words(self.target_count, self.word_bank, self.smart_mode)
         else:
             self.text = "Type something."
-        
         if not self.text:
             self.text = "Error loading text."
 
@@ -320,10 +312,9 @@ class TypingApp:
             self.draw_menu()
             return
 
-        self.stdscr.erase() # More efficient than clear
+        self.stdscr.erase()
         height, width = self.stdscr.getmaxyx()
         
-        # Draw Border
         try:
             self.stdscr.box()
             self.stdscr.attron(curses.color_pair(5))
@@ -332,7 +323,6 @@ class TypingApp:
         except curses.error:
             pass
 
-        # Title
         title = " SCRIBERE "
         start_x = (width - len(title)) // 2
         try:
@@ -340,7 +330,6 @@ class TypingApp:
         except curses.error:
             pass
 
-        # Status Bar
         status = f" Mode: {self.mode.upper()} | Words: {self.target_count} | Bank: {self.word_bank} "
         if self.finished:
             status = " TEST COMPLETE "
@@ -349,12 +338,10 @@ class TypingApp:
         except curses.error:
             pass
 
-        # Text Display Area
         start_row = 4
         max_rows = height - 8
         max_cols = width - 4
         
-        # Wrap text
         wrapped_lines = []
         current_line = ""
         for char in self.text:
@@ -366,28 +353,21 @@ class TypingApp:
         if current_line:
             wrapped_lines.append(current_line)
         
-        # Determine scroll offset based on cursor
         flat_cursor = min(self.cursor_pos, len(self.text))
         
         current_flat = 0
         cursor_line_idx = 0
-        cursor_col_idx = 0
-        
         for l_idx, line in enumerate(wrapped_lines):
             if current_flat + len(line) >= flat_cursor:
                 cursor_line_idx = l_idx
-                cursor_col_idx = flat_cursor - current_flat
                 break
             current_flat += len(line)
         
-        # Scroll logic
         scroll_offset = 0
         if cursor_line_idx >= max_rows:
             scroll_offset = cursor_line_idx - max_rows + 1
         
         visible_lines = wrapped_lines[scroll_offset : scroll_offset + max_rows]
-        
-        # Render lines
         global_flat_idx = sum(len(l) for l in wrapped_lines[:scroll_offset])
         
         for r_idx, line in enumerate(visible_lines):
@@ -398,18 +378,21 @@ class TypingApp:
                 t_char = char
                 char_idx_global = global_flat_idx + c_idx
                 
-                attr = curses.color_pair(4) # Default untyped
+                # FIXED LOGIC: Check character independence
+                attr = curses.color_pair(4) # Default untyped (White)
                 
+                # If we have typed up to this index
                 if char_idx_global < len(self.user_input):
                     u_char = self.user_input[char_idx_global]
                     if u_char == t_char:
                         attr = curses.color_pair(1) # Correct (Blue)
                     else:
                         attr = curses.color_pair(2) # Error (Red)
+                # If we haven't reached this index yet, it stays White (untouched)
                 
                 # Cursor Highlight
                 if char_idx_global == flat_cursor and not self.finished:
-                    attr = curses.color_pair(3) | curses.A_REVERSE # Green/Reverse
+                    attr = curses.color_pair(3) | curses.A_REVERSE
                 
                 try:
                     self.stdscr.addch(screen_r, 2 + c_idx, t_char, attr)
@@ -418,11 +401,9 @@ class TypingApp:
             
             global_flat_idx += len(line)
 
-        # Stats or Finish Screen
         if self.finished:
             self.draw_results(start_row + max_rows + 1, width)
         else:
-            # Live Stats
             wpm = 0
             if self.start_time:
                 elapsed = (time.time() - self.start_time) / 60.0
@@ -442,7 +423,6 @@ class TypingApp:
         h, w = self.stdscr.getmaxyx()
         self.stdscr.erase()
         
-        # Menu Box
         menu_h, menu_w = 12, 50
         start_y, start_x = (h - menu_h) // 2, (w - menu_w) // 2
         
@@ -467,10 +447,9 @@ class TypingApp:
         win.addstr(menu_h - 2, 2, " Select (1-5) or Esc to close ", curses.color_pair(5) | curses.A_DIM)
         win.refresh()
         
-        # Wait for selection
         while True:
             key = win.getch()
-            if key == 27 or key == ord('q'): # Esc or q
+            if key == 27 or key == ord('q'):
                 self.show_menu = False
                 break
             elif key == ord('1'):
@@ -509,7 +488,10 @@ class TypingApp:
     def get_accuracy(self):
         if len(self.user_input) == 0:
             return 100.0
-        correct = sum(1 for i, c in enumerate(self.user_input) if i < len(self.text) and c == self.text[i])
+        correct = 0
+        for i in range(len(self.user_input)):
+            if i < len(self.text) and self.user_input[i] == self.text[i]:
+                correct += 1
         return (correct / len(self.user_input)) * 100
 
     def draw_results(self, row, width):
@@ -550,23 +532,22 @@ class TypingApp:
 
     def handle_input(self, key):
         if self.show_menu:
-            # Handled in draw_menu loop, but if we get here, close menu
             self.show_menu = False
             return
 
         if self.finished:
-            if key == 10 or key == curses.KEY_ENTER: # Enter: Restart
+            if key == 10 or key == curses.KEY_ENTER:
                 self.reset_test()
             elif key == ord('m') or key == ord('M'):
                 self.show_highscores()
             elif key == ord('d') or key == ord('D'):
                 self.config["minimal_stats"] = not self.config.get("minimal_stats", False)
                 save_config(self.config)
-            elif key == 27: # Esc
+            elif key == 27:
                 self.show_menu = True
             return
 
-        if key == 27: # ESC: Open Menu
+        if key == 27:
             self.show_menu = True
             return
 
@@ -574,7 +555,6 @@ class TypingApp:
              self.finish_test()
              return
 
-        # Typing logic
         if key == curses.KEY_BACKSPACE or key == 127 or key == 8:
             if self.cursor_pos > 0:
                 self.cursor_pos -= 1
@@ -586,21 +566,24 @@ class TypingApp:
         elif key == curses.KEY_RIGHT:
             if self.cursor_pos < len(self.text):
                 self.cursor_pos += 1
-        elif 32 <= key <= 126: # Printable
+        elif 32 <= key <= 126:
             if self.cursor_pos < len(self.text):
                 char = chr(key)
+                # Overwrite or Append logic
                 if self.cursor_pos == len(self.user_input):
                     self.user_input += char
                 else:
+                    # If we are in the middle, overwrite the char at cursor
+                    # But keep the rest of the string if it exists
                     if self.cursor_pos < len(self.user_input):
-                         self.user_input = self.user_input[:self.cursor_pos] + char + self.user_input[self.cursor_pos+1:]
+                        self.user_input = self.user_input[:self.cursor_pos] + char + self.user_input[self.cursor_pos+1:]
                     else:
-                         self.user_input += char
+                        self.user_input += char
                 
-                if self.cursor_pos < len(self.text):
-                    if self.user_input[self.cursor_pos] != self.text[self.cursor_pos]:
-                         self.errors += 1
-                    
+                # Only count error if the char we just typed is wrong
+                if self.user_input[self.cursor_pos] != self.text[self.cursor_pos]:
+                     self.errors += 1
+                
                 self.cursor_pos += 1
                 self.total_chars_typed += 1
                 
@@ -718,7 +701,6 @@ if __name__ == "__main__":
     elif args.command == 'start':
         pass
     else:
-        # Default to rand-25 if no command
         class DefaultArgs:
             command = 'start'
             mode = 'rand'
