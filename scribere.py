@@ -12,6 +12,15 @@ import os
 import json
 import sys
 import argparse
+import urllib.request
+import io
+
+# Try to import Pillow for the easter egg
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 # --- Configuration & Data ---
 
@@ -19,41 +28,57 @@ CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".scribere")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 SCORES_FILE = os.path.join(CONFIG_DIR, "scores.json")
 
-# Fixed & Expanded Common Words Bank
-COMMON_WORDS = [
+# Common Words Bank (Frequency weighted by repetition)
+BASE_WORDS = [
     "the", "be", "to", "of", "and", "a", "in", "that", "have", "it",
-    "for", "not", "on", "with", "he", "as", "you", "do", "at", "this", "dog",
-    "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "dig",
-    "an", "will", "my", "one", "all", "would", "there", "their", "what", "so", "wish",
-    "up", "out", "if", "about", "who", "get", "which", "go", "me", "when", "send", "folk", "musician", "music", "rock", "pop", "jazz", "electronic",
-    "make", "can", "like", "time", "no", "just", "him", "know", "take", "people", "man",
-    "into", "year", "your", "good", "some", "could", "them", "see", "other", "than", "cost",
-    "then", "now", "look", "only", "come", "its", "over", "think", "also", "back", "talking", "shop",
-    "after", "use", "two", "how", "our", "work", "first", "well", "way", "even", "fly", "european", "african", "asian", "balkan",
-    "new", "want", "because", "any", "these", "give", "day", "most", "us", "is", "meme", "liquid",
-    "house", "school", "fight", "although", "through", "water", "money", "world", "place", "group", "tiny", "large",
-    "hand", "high", "part", "child", "eye", "woman", "life", "down", "head", "stand", "kid", "silly", "wise",
+    "for", "not", "on", "with", "he", "as", "you", "do", "at", "this",
+    "but", "his", "by", "from", "they", "we", "say", "her", "she", "or",
+    "an", "will", "my", "one", "all", "would", "there", "their", "what", "so",
+    "up", "out", "if", "about", "who", "get", "which", "go", "me", "when",
+    "make", "can", "like", "time", "no", "just", "him", "know", "take", "people",
+    "into", "year", "your", "good", "some", "could", "them", "see", "other", "than",
+    "then", "now", "look", "only", "come", "its", "over", "think", "also", "back",
+    "after", "use", "two", "how", "our", "work", "first", "well", "way", "even",
+    "new", "want", "because", "any", "these", "give", "day", "most", "us", "is",
+    "house", "school", "fight", "although", "through", "water", "money", "world", "place", "group",
+    "hand", "high", "part", "child", "eye", "woman", "life", "down", "head", "stand",
     "own", "page", "should", "country", "found", "answer", "study", "still", "learn", "parent",
-    "face", "friend", "mother", "father", "city", "line", "near", "far", "door", "room", "floor", "lost",
-    "book", "letter", "word", "sentence", "paper", "idea", "question", "change", "order", "number", "half",
-    "start", "end", "road", "map", "car", "bus", "train", "plane", "boat", "bike", "however", "black", "white",
-    "dog", "cat", "bird", "fish", "tree", "flower", "grass", "sun", "moon", "star", "his", "her",
-    "sky", "cloud", "rain", "snow", "wind", "fire", "earth", "stone", "sand", "hill", "cat", "frog",
-    "river", "lake", "sea", "ocean", "bridge", "tower", "wall", "gate", "fence", "path", "sour", "bitter", "sweet",
-    "food", "bread", "milk", "egg", "meat", "fruit", "apple", "orange", "banana", "grape", "computer",
-    "cake", "sugar", "salt", "pepper", "coffee", "tea", "juice", "beer", "wine", "water", "eat", "chocolate",
-    "hot", "cold", "warm", "cool", "dry", "wet", "hard", "soft", "heavy", "light", "great", "awesome",
-    "fast", "slow", "old", "young", "big", "small", "long", "short", "wide", "narrow", "taste", "wrong", "right",
-    "thick", "thin", "deep", "shallow", "high", "low", "loud", "quiet", "bright", "dark", "true", "truth", "false", "fake",
-    "clean", "dirty", "full", "empty", "open", "closed", "safe", "dangerous", "easy", "hard", "ice",
+    "face", "friend", "mother", "father", "city", "line", "near", "far", "door", "room", "floor",
+    "book", "letter", "word", "sentence", "paper", "idea", "question", "change", "order", "number",
+    "start", "end", "road", "map", "car", "bus", "train", "plane", "boat", "bike",
+    "dog", "cat", "bird", "fish", "tree", "flower", "grass", "sun", "moon", "star",
+    "sky", "cloud", "rain", "snow", "wind", "fire", "earth", "stone", "sand", "hill",
+    "river", "lake", "sea", "ocean", "bridge", "tower", "wall", "gate", "fence", "path",
+    "food", "bread", "milk", "egg", "meat", "fruit", "apple", "orange", "banana", "grape",
+    "cake", "sugar", "salt", "pepper", "coffee", "tea", "juice", "beer", "wine", "water",
+    "hot", "cold", "warm", "cool", "dry", "wet", "hard", "soft", "heavy", "light",
+    "fast", "slow", "old", "young", "big", "small", "long", "short", "wide", "narrow",
+    "thick", "thin", "deep", "shallow", "high", "low", "loud", "quiet", "bright", "dark",
+    "clean", "dirty", "full", "empty", "open", "closed", "safe", "dangerous", "easy", "hard",
     "happy", "sad", "angry", "afraid", "tired", "hungry", "thirsty", "sick", "healthy", "strong",
-    "weak", "rich", "poor", "kind", "mean", "nice", "rude", "smart", "stupid", "funny", "miller", "care", "game",
-    "serious", "busy", "free", "early", "late", "soon", "never", "always", "often", "sometimes", "sound",
+    "weak", "rich", "poor", "kind", "mean", "nice", "rude", "smart", "stupid", "funny",
+    "serious", "busy", "free", "early", "late", "soon", "never", "always", "often", "sometimes",
     "here", "there", "everywhere", "nowhere", "somewhere", "inside", "outside", "above", "below", "between",
-    "before", "behind", "next", "last", "first", "second", "third", "fourth", "fifth", "tenth"
+    "before", "behind", "next", "last", "first", "second", "third", "fourth", "fifth", "tenth",
+    # Extra flavor words
+    "dig", "wish", "send", "folk", "musician", "music", "rock", "pop", "jazz", "electronic",
+    "man", "cost", "talking", "shop", "fly", "european", "african", "asian", "balkan",
+    "meme", "liquid", "tiny", "large", "kid", "silly", "wise", "lost", "half",
+    "however", "black", "white", "frog", "sour", "bitter", "sweet", "computer", "eat", "chocolate",
+    "great", "awesome", "taste", "wrong", "right", "true", "truth", "false", "fake", "ice",
+    "miller", "care", "game", "sound"
 ]
 
-# Complex Words Bank
+# Weighted list: Common words appear multiple times to increase frequency
+COMMON_WORDS = []
+for word in BASE_WORDS:
+    if word in ["the", "be", "to", "of", "and", "a", "in", "that", "have", "it", "for", "on", "with", "he", "as", "you", "do", "at"]:
+        COMMON_WORDS.extend([word] * 8)  # Very high frequency
+    elif word in ["this", "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all"]:
+        COMMON_WORDS.extend([word] * 5)  # High frequency
+    else:
+        COMMON_WORDS.append(word)        # Normal frequency
+
 COMPLEX_WORDS = [
     "phallus", "beryllium", "doctorate", "ephemeral", "quintessential", "serendipity", "ubiquitous",
     "cacophony", "juxtaposition", "mitochondria", "photosynthesis", "algorithm", "cryptography",
@@ -86,94 +111,178 @@ COMPLEX_WORDS = [
     "jazz", "blues", "rock", "pop", "folk", "classical", "electronic", "hiphop", "reggae", "country"
 ]
 
-# Smart Sentence Templates (Subject + Verb + Object/Adj)
-# Uses weights to ensure common words appear more often
+# Smart Sentence Templates
 TEMPLATES = [
-    "{adj} {noun} {verb} {prep} the {noun}.",
-    "the {noun} {verb} {adj}.",
-    "{pronoun} {verb} the {noun} {adv}.",
-    "is the {noun} {adj}?",
-    "why {pronoun} {verb} {adj}?",
+    "{noun} {verb} {adj} {noun}.",
+    "The {adj} {noun} {verb} {adv}.",
+    "{pronoun} {verb} the {adj} {noun}.",
+    "Can {pronoun} {verb} {adj} {noun}?",
+    "Why is the {noun} so {adj}?",
     "{noun} and {noun} are {adj}.",
-    "the {adj} {noun} {verb}.",
-    "{pronoun} can {verb} {adv}.",
-    "do not {verb} the {noun}.",
-    "it is {adj} to {verb}.",
-    "{noun} {verb} {prep} the {adj} {noun}.",
-    "very {adj} {noun}.",
-    "the {noun} is {adj}.",
-    "{pronoun} {verb} {noun}."
+    "I see a {adj} {noun}.",
+    "Do not {verb} the {noun}.",
+    "It is {adj} to {verb} {noun}.",
+    "{pronoun} will {verb} {noun} tomorrow.",
+    "The {noun} is {verb}ing.",
+    "Many {noun}s are {adj}.",
+    "She likes {adj} {noun}s.",
+    "He went to the {noun}.",
+    "We need more {noun}.",
+    "Where is the {noun}?",
+    "This {noun} looks {adj}.",
+    "They are {verb}ing the {noun}.",
+    "No {noun} here.",
+    "Just {verb} it."
 ]
 
-WORD_TYPES = {
-    "noun": ["dog", "cat", "bird", "fish", "tree", "flower", "grass", "sun", "moon", "star", "sky", "cloud", "rain", "snow", "wind", "fire", "earth", "stone", "sand", "hill", "river", "lake", "sea", "ocean", "bridge", "tower", "wall", "gate", "fence", "path", "food", "bread", "milk", "egg", "meat", "fruit", "apple", "orange", "banana", "grape", "computer", "cake", "sugar", "salt", "pepper", "coffee", "tea", "juice", "beer", "wine", "water", "chocolate", "house", "school", "money", "world", "place", "group", "hand", "head", "eye", "woman", "life", "child", "friend", "mother", "father", "city", "line", "door", "room", "floor", "book", "letter", "word", "sentence", "paper", "idea", "question", "change", "order", "number", "road", "map", "car", "bus", "train", "plane", "boat", "bike", "man", "people", "time", "day", "year", "way", "thing", "game", "sound", "ice"],
-    "verb": ["be", "have", "do", "say", "go", "get", "make", "know", "think", "take", "see", "come", "want", "use", "find", "give", "tell", "work", "call", "try", "ask", "need", "feel", "become", "leave", "put", "mean", "keep", "let", "begin", "seem", "help", "talk", "turn", "start", "show", "hear", "play", "run", "move", "like", "live", "believe", "hold", "bring", "happen", "write", "provide", "sit", "stand", "lose", "pay", "meet", "include", "continue", "set", "learn", "change", "lead", "understand", "watch", "follow", "stop", "create", "speak", "read", "allow", "add", "spend", "grow", "open", "walk", "win", "offer", "remember", "love", "consider", "appear", "buy", "wait", "serve", "die", "send", "expect", "build", "stay", "fall", "cut", "reach", "kill", "remain", "suggest", "raise", "pass", "sell", "require", "report", "decide", "pull"],
-    "adj": ["good", "new", "first", "last", "long", "great", "little", "own", "other", "old", "right", "big", "high", "different", "small", "large", "next", "early", "young", "important", "few", "public", "bad", "same", "able", "true", "wrong", "false", "fake", "hot", "cold", "warm", "cool", "dry", "wet", "hard", "soft", "heavy", "light", "loud", "quiet", "bright", "dark", "clean", "dirty", "full", "empty", "safe", "dangerous", "easy", "happy", "sad", "angry", "afraid", "tired", "hungry", "thirsty", "sick", "healthy", "strong", "weak", "rich", "poor", "kind", "mean", "nice", "rude", "smart", "stupid", "funny", "serious", "busy", "free", "late", "soon", "tiny", "large", "silly", "wise", "lost", "sour", "bitter", "sweet", "awesome", "european", "african", "asian", "balkan"],
-    "pronoun": ["i", "you", "he", "she", "it", "we", "they", "one", "someone", "everyone"],
-    "prep": ["in", "on", "at", "to", "for", "with", "by", "from", "up", "about", "into", "over", "after", "under", "before"],
-    "adv": ["quickly", "slowly", "carefully", "badly", "well", "very", "really", "always", "never", "often", "sometimes", "here", "there", "now", "then", "today", "tomorrow", "yes", "no"]
+TEMPLATE_FILLERS = {
+    "noun": BASE_WORDS[:50], # Use common nouns roughly
+    "verb": ["run", "jump", "eat", "sleep", "walk", "talk", "see", "hear", "feel", "think", "make", "take", "go", "come", "work", "play", "live", "love", "hate", "fight"],
+    "adj": ["big", "small", "red", "blue", "green", "fast", "slow", "hot", "cold", "good", "bad", "new", "old", "high", "low", "bright", "dark", "happy", "sad", "wise"],
+    "adv": ["quickly", "slowly", "loudly", "quietly", "happily", "sadly", "well", "badly", "very", "too"],
+    "pronoun": ["I", "you", "he", "she", "it", "we", "they"]
 }
 
-def get_weighted_word(word_list):
-    # Simple weighting: first 20% of list appears 50% of the time
-    if random.random() < 0.5:
-        return random.choice(word_list[:max(1, len(word_list)//5)])
-    return random.choice(word_list)
+def ensure_config():
+    if not os.path.exists(CONFIG_DIR):
+        os.makedirs(CONFIG_DIR)
+    if not os.path.exists(CONFIG_FILE):
+        default_config = {
+            "color_theme": "default",
+            "minimal_stats": False,
+            "word_bank": "common",
+            "smart_sentences": False
+        }
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(default_config, f)
+    if not os.path.exists(SCORES_FILE):
+        with open(SCORES_FILE, 'w') as f:
+            json.dump([], f)
 
-def generate_smart_sentence():
-    template = random.choice(TEMPLATES)
-    result = template
-    
-    for key in WORD_TYPES:
-        # Replace all occurrences of {key}
-        while "{" + key + "}" in result:
-            word = get_weighted_word(WORD_TYPES[key])
-            result = result.replace("{" + key + "}", word, 1)
-    
-    return result
+def load_config():
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return {"word_bank": "common", "smart_sentences": False, "minimal_stats": False}
+
+def save_config(config):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f)
+
+def load_scores():
+    try:
+        with open(SCORES_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_scores(scores):
+    with open(SCORES_FILE, 'w') as f:
+        json.dump(scores, f)
 
 def get_random_words(count, word_bank="common", smart=False):
+    if word_bank == "complex":
+        source = COMPLEX_WORDS
+    else:
+        source = COMMON_WORDS
+    
     if smart:
         sentences = []
-        current_len = 0
-        while current_len < count:
-            s = generate_smart_sentence()
-            sentences.append(s)
-            current_len += len(s.split())
-        return " ".join(sentences)[:len(" ".join(sentences).split()[:count])] # Rough cut
-    
-    if word_bank == "complex":
-        return " ".join(random.choice(COMPLEX_WORDS) for _ in range(count))
-    else:
-        # Weighted random for common words too
-        words = []
-        for _ in range(count):
-            if random.random() < 0.6: # 60% chance of top 20% words
-                words.append(random.choice(COMMON_WORDS[:50]))
-            else:
-                words.append(random.choice(COMMON_WORDS))
+        while len(" ".join(sentences).split()) < count:
+            template = random.choice(TEMPLATES)
+            sentence = template
+            for key in TEMPLATE_FILLERS:
+                sentence = sentence.replace("{" + key + "}", random.choice(TEMPLATE_FILLERS[key]))
+            sentences.append(sentence)
+        result = " ".join(sentences)
+        # Trim to exact count roughly
+        words = result.split()[:count]
         return " ".join(words)
+    else:
+        return " ".join(random.choice(source) for _ in range(count))
 
-def get_quote_by_length(length_cat):
-    # Placeholder for quote logic (same as before)
-    # Re-using the QUOTES_DB from previous version would go here
-    # For brevity in this snippet, assuming it exists or returning fallback
-    fallback = "The quick brown fox jumps over the lazy dog."
-    return fallback 
+# --- Easter Egg Logic ---
 
-def get_random_quote():
-    return "Practice makes perfect."
+def fetch_and_convert_image(url):
+    if not PIL_AVAILABLE:
+        return ["Pillow library not installed.", "Run: pip install Pillow"]
+    
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response = urllib.request.urlopen(req, timeout=10)
+        img_data = response.read()
+        
+        img = Image.open(io.BytesIO(img_data))
+        
+        # Convert to grayscale and resize to fit terminal
+        # Approximate terminal width 80, height 40, aspect ratio ~2:1 for chars
+        width = 80
+        height = int(width * (img.height / img.width) * 0.5)
+        img = img.convert('L').resize((width, height), Image.Resampling.LANCZOS)
+        
+        pixels = list(img.getdata())
+        chars = "@%#*+=-:. "
+        
+        ascii_lines = []
+        for i in range(height):
+            line = ""
+            for j in range(width):
+                pixel = pixels[i * width + j]
+                char_idx = int(pixel / 255 * (len(chars) - 1))
+                line += chars[char_idx]
+            ascii_lines.append(line)
+        
+        return ascii_lines
+    except Exception as e:
+        return [f"Error loading image: {str(e)}", "Check internet connection."]
+
+def show_secret_screen(stdscr):
+    stdscr.clear()
+    stdscr.nodelay(False)
+    curses.curs_set(0)
+    
+    h, w = stdscr.getmaxyx()
+    
+    title = " SECRET FOUND "
+    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
+    stdscr.addstr(0, (w - len(title)) // 2, title)
+    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
+    
+    lines = fetch_and_convert_image("https://f4.bcbits.com/img/a1664460568_10.jpg")
+    
+    start_y = 2
+    for i, line in enumerate(lines):
+        if start_y + i >= h - 2:
+            break
+        # Center the line
+        x_pos = max(0, (w - len(line)) // 2)
+        try:
+            stdscr.addstr(start_y + i, x_pos, line, curses.color_pair(1))
+        except curses.error:
+            pass
+    
+    msg = " Press any key to return "
+    stdscr.addstr(h - 2, (w - len(msg)) // 2, msg, curses.color_pair(5) | curses.A_DIM)
+    stdscr.refresh()
+    stdscr.getch()
 
 # --- Application Logic ---
 
 class TypingApp:
-    def __init__(self, stdscr, mode, target_count=None, length_cat=None, word_bank="common", smart=False):
+    def __init__(self, stdscr, mode, target_count=25, word_bank="common"):
         self.stdscr = stdscr
-        self.mode = mode
+        self.mode = mode # 'rand', 'zen'
         self.target_count = target_count
-        self.length_cat = length_cat
         self.word_bank = word_bank
-        self.smart_mode = smart
+        self.config = load_config()
+        
+        # Apply config overrides
+        if self.config.get("smart_sentences", False):
+            self.smart_mode = True
+        else:
+            self.smart_mode = False
+            
         self.text = ""
         self.user_input = ""
         self.start_time = None
@@ -182,48 +291,41 @@ class TypingApp:
         self.cursor_pos = 0
         self.errors = 0
         self.total_chars_typed = 0
-        self.config = load_config()
+        self.show_menu = False
         
-        # Setup Curses for minimal flicker
+        # Initialize colors
         curses.start_color()
         curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_BLUE, -1)
-        curses.init_pair(2, curses.COLOR_RED, -1)
-        curses.init_pair(3, curses.COLOR_GREEN, -1)
-        curses.init_pair(4, curses.COLOR_WHITE, -1)
-        curses.init_pair(5, curses.COLOR_YELLOW, -1)
-        
-        # Critical for flicker reduction
-        curses.curs_set(0) # Hide physical cursor
-        self.stdscr.nodelay(True) # Non-blocking
-        self.stdscr.keypad(True)
-        curses.noecho()
+        curses.init_pair(1, curses.COLOR_BLUE, -1)   # Correct
+        curses.init_pair(2, curses.COLOR_RED, -1)    # Error
+        curses.init_pair(3, curses.COLOR_GREEN, -1)  # Cursor highlight
+        curses.init_pair(4, curses.COLOR_WHITE, -1)  # Untyped
+        curses.init_pair(5, curses.COLOR_YELLOW, -1) # UI Borders
+        curses.init_pair(6, curses.COLOR_CYAN, -1)   # Menu Highlight
         
         self.setup_text()
         self.running = True
-        self.last_draw_time = 0
 
     def setup_text(self):
-        if self.mode == 'rand':
-            count = self.target_count if self.target_count else 25
-            self.text = get_random_words(count, self.word_bank, self.smart_mode)
-        elif self.mode == 'quote':
-            self.text = get_quote_by_length(self.length_cat) if self.length_cat else get_random_quote()
-        elif self.mode == 'zen':
-            self.text = get_quote_by_length(self.length_cat) if self.length_cat else get_random_quote()
-        elif self.mode == 'custom':
-            self.text = "Type your own custom text here."
+        if self.mode in ['rand', 'zen']:
+            self.text = get_random_words(self.target_count, self.word_bank, self.smart_mode)
+        else:
+            self.text = "Type something."
         
         if not self.text:
             self.text = "Error loading text."
 
     def draw_screen(self):
-        # Double buffering: Draw to offscreen, then refresh once
-        self.stdscr.erase() # Faster than clear() sometimes
+        if self.show_menu:
+            self.draw_menu()
+            return
+
+        self.stdscr.erase() # More efficient than clear
         height, width = self.stdscr.getmaxyx()
         
         # Draw Border
         try:
+            self.stdscr.box()
             self.stdscr.attron(curses.color_pair(5))
             self.stdscr.box()
             self.stdscr.attroff(curses.color_pair(5))
@@ -232,16 +334,16 @@ class TypingApp:
 
         # Title
         title = " SCRIBERE "
-        start_x = max(0, (width - len(title)) // 2)
+        start_x = (width - len(title)) // 2
         try:
             self.stdscr.addstr(0, start_x, title, curses.color_pair(5) | curses.A_BOLD)
         except curses.error:
             pass
 
         # Status Bar
-        status = f" Mode: {self.mode.upper()} | Bank: {self.word_bank} "
-        if self.smart_mode: status += "(Smart) "
-        if self.finished: status = " TEST COMPLETE "
+        status = f" Mode: {self.mode.upper()} | Words: {self.target_count} | Bank: {self.word_bank} "
+        if self.finished:
+            status = " TEST COMPLETE "
         try:
             self.stdscr.addstr(2, 2, status, curses.color_pair(5))
         except curses.error:
@@ -264,8 +366,9 @@ class TypingApp:
         if current_line:
             wrapped_lines.append(current_line)
         
-        # Scroll logic
+        # Determine scroll offset based on cursor
         flat_cursor = min(self.cursor_pos, len(self.text))
+        
         current_flat = 0
         cursor_line_idx = 0
         cursor_col_idx = 0
@@ -277,46 +380,55 @@ class TypingApp:
                 break
             current_flat += len(line)
         
+        # Scroll logic
         scroll_offset = 0
         if cursor_line_idx >= max_rows:
             scroll_offset = cursor_line_idx - max_rows + 1
         
         visible_lines = wrapped_lines[scroll_offset : scroll_offset + max_rows]
-        global_flat_idx = sum(len(l) for l in wrapped_lines[:scroll_offset])
         
         # Render lines
+        global_flat_idx = sum(len(l) for l in wrapped_lines[:scroll_offset])
+        
         for r_idx, line in enumerate(visible_lines):
             screen_r = start_row + r_idx
+            if screen_r >= height - 2: break
+            
             for c_idx, char in enumerate(line):
                 t_char = char
                 char_idx_global = global_flat_idx + c_idx
-                attr = curses.color_pair(4)
+                
+                attr = curses.color_pair(4) # Default untyped
                 
                 if char_idx_global < len(self.user_input):
                     u_char = self.user_input[char_idx_global]
                     if u_char == t_char:
-                        attr = curses.color_pair(1)
+                        attr = curses.color_pair(1) # Correct (Blue)
                     else:
-                        attr = curses.color_pair(2)
+                        attr = curses.color_pair(2) # Error (Red)
                 
+                # Cursor Highlight
                 if char_idx_global == flat_cursor and not self.finished:
-                    attr = curses.color_pair(3) | curses.A_REVERSE
+                    attr = curses.color_pair(3) | curses.A_REVERSE # Green/Reverse
                 
                 try:
                     self.stdscr.addch(screen_r, 2 + c_idx, t_char, attr)
                 except curses.error:
                     pass
+            
             global_flat_idx += len(line)
 
-        # Stats
+        # Stats or Finish Screen
         if self.finished:
             self.draw_results(start_row + max_rows + 1, width)
         else:
+            # Live Stats
             wpm = 0
             if self.start_time:
                 elapsed = (time.time() - self.start_time) / 60.0
                 if elapsed > 0:
-                    wpm = int((len(self.user_input) / 5.0) / elapsed)
+                    chars_typed = len(self.user_input)
+                    wpm = int((chars_typed / 5.0) / elapsed)
             
             stats_str = f" WPM: {wpm} | Acc: {self.get_accuracy():.1f}% | Err: {self.errors} "
             try:
@@ -324,70 +436,171 @@ class TypingApp:
             except curses.error:
                 pass
         
-        self.stdscr.refresh() # Single refresh per frame eliminates flicker
+        self.stdscr.refresh()
+
+    def draw_menu(self):
+        h, w = self.stdscr.getmaxyx()
+        self.stdscr.erase()
+        
+        # Menu Box
+        menu_h, menu_w = 12, 50
+        start_y, start_x = (h - menu_h) // 2, (w - menu_w) // 2
+        
+        win = curses.newwin(menu_h, menu_w, start_y, start_x)
+        win.box()
+        win.keypad(True)
+        
+        title = " MENU "
+        win.addstr(0, (menu_w - len(title)) // 2, title, curses.color_pair(5) | curses.A_BOLD)
+        
+        options = [
+            "1. Toggle Smart Sentences",
+            "2. Change Word Bank (Common/Complex)",
+            "3. Toggle Minimal Stats",
+            "4. Resume Test",
+            "5. Quit App"
+        ]
+        
+        for i, opt in enumerate(options):
+            win.addstr(2 + i, 2, opt, curses.color_pair(6))
+        
+        win.addstr(menu_h - 2, 2, " Select (1-5) or Esc to close ", curses.color_pair(5) | curses.A_DIM)
+        win.refresh()
+        
+        # Wait for selection
+        while True:
+            key = win.getch()
+            if key == 27 or key == ord('q'): # Esc or q
+                self.show_menu = False
+                break
+            elif key == ord('1'):
+                self.config["smart_sentences"] = not self.config.get("smart_sentences", False)
+                save_config(self.config)
+                self.smart_mode = self.config["smart_sentences"]
+                self.reset_test()
+                break
+            elif key == ord('2'):
+                self.config["word_bank"] = "complex" if self.config.get("word_bank") == "common" else "common"
+                save_config(self.config)
+                self.word_bank = self.config["word_bank"]
+                self.reset_test()
+                break
+            elif key == ord('3'):
+                self.config["minimal_stats"] = not self.config.get("minimal_stats", False)
+                save_config(self.config)
+                break
+            elif key == ord('4'):
+                self.show_menu = False
+                break
+            elif key == ord('5'):
+                self.running = False
+                break
+
+    def reset_test(self):
+        self.text = get_random_words(self.target_count, self.word_bank, self.smart_mode)
+        self.user_input = ""
+        self.start_time = None
+        self.end_time = None
+        self.finished = False
+        self.cursor_pos = 0
+        self.errors = 0
+        self.total_chars_typed = 0
 
     def get_accuracy(self):
-        if len(self.user_input) == 0: return 100.0
+        if len(self.user_input) == 0:
+            return 100.0
         correct = sum(1 for i, c in enumerate(self.user_input) if i < len(self.text) and c == self.text[i])
         return (correct / len(self.user_input)) * 100
 
     def draw_results(self, row, width):
-        elapsed = (self.end_time - self.start_time) if (self.end_time and self.start_time) else 0
-        wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0)) if elapsed > 0 else 0
+        elapsed = 0
+        if self.start_time and self.end_time:
+            elapsed = self.end_time - self.start_time
+        
+        wpm = 0
+        if elapsed > 0:
+            wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0))
+        
         acc = self.get_accuracy()
         
         res_title = " RESULTS "
+        start_x = (width - len(res_title)) // 2
         try:
-            self.stdscr.addstr(row, max(0, (width - len(res_title)) // 2), res_title, curses.color_pair(5) | curses.A_BOLD)
-        except curses.error: pass
+            self.stdscr.addstr(row, start_x, res_title, curses.color_pair(5) | curses.A_BOLD)
+        except curses.error:
+            pass
 
         minimal = self.config.get("minimal_stats", False)
-        stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% " if minimal else f" WPM: {wpm} | Accuracy: {acc:.1f}% | Errors: {self.errors} | Time: {elapsed:.1f}s "
+        
+        if minimal:
+            stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% "
+        else:
+            stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% | Errors: {self.errors} | Chars: {len(self.user_input)} | Time: {elapsed:.1f}s "
         
         try:
             self.stdscr.addstr(row + 2, 2, stats, curses.color_pair(1) | curses.A_BOLD)
-            self.stdscr.addstr(row + 4, 2, " Press Enter to continue | 'M' for Scores | 'D' toggle stats ", curses.color_pair(5) | curses.A_DIM)
-        except curses.error: pass
+        except curses.error:
+            pass
+            
+        hint = " Enter: New Test | M: Scores | D: Toggle Stats | Esc: Menu "
+        try:
+            self.stdscr.addstr(row + 4, 2, hint, curses.color_pair(5) | curses.A_DIM)
+        except curses.error:
+            pass
 
     def handle_input(self, key):
+        if self.show_menu:
+            # Handled in draw_menu loop, but if we get here, close menu
+            self.show_menu = False
+            return
+
         if self.finished:
-            if key in (10, curses.KEY_ENTER, 13):
-                self.running = False
-            elif key in (ord('m'), ord('M')):
+            if key == 10 or key == curses.KEY_ENTER: # Enter: Restart
+                self.reset_test()
+            elif key == ord('m') or key == ord('M'):
                 self.show_highscores()
-            elif key in (ord('d'), ord('D')):
+            elif key == ord('d') or key == ord('D'):
                 self.config["minimal_stats"] = not self.config.get("minimal_stats", False)
                 save_config(self.config)
+            elif key == 27: # Esc
+                self.show_menu = True
             return
 
-        if key == 27: # ESC
-            self.running = False
+        if key == 27: # ESC: Open Menu
+            self.show_menu = True
             return
 
-        if self.mode == 'zen' and key in (10, curses.KEY_ENTER, 13, 343):
+        if self.mode == 'zen' and (key == 10 or key == curses.KEY_ENTER or key == 343): 
              self.finish_test()
              return
 
-        if key in (curses.KEY_BACKSPACE, 127, 8, 263): # 263 is often backspace in some terms
+        # Typing logic
+        if key == curses.KEY_BACKSPACE or key == 127 or key == 8:
             if self.cursor_pos > 0:
                 self.cursor_pos -= 1
                 if len(self.user_input) > 0:
                     self.user_input = self.user_input[:-1]
         elif key == curses.KEY_LEFT:
-            if self.cursor_pos > 0: self.cursor_pos -= 1
+            if self.cursor_pos > 0:
+                self.cursor_pos -= 1
         elif key == curses.KEY_RIGHT:
-            if self.cursor_pos < len(self.text): self.cursor_pos += 1
-        elif 32 <= key <= 126:
+            if self.cursor_pos < len(self.text):
+                self.cursor_pos += 1
+        elif 32 <= key <= 126: # Printable
             if self.cursor_pos < len(self.text):
                 char = chr(key)
                 if self.cursor_pos == len(self.user_input):
                     self.user_input += char
-                elif self.cursor_pos < len(self.user_input):
-                    self.user_input = self.user_input[:self.cursor_pos] + char + self.user_input[self.cursor_pos+1:]
+                else:
+                    if self.cursor_pos < len(self.user_input):
+                         self.user_input = self.user_input[:self.cursor_pos] + char + self.user_input[self.cursor_pos+1:]
+                    else:
+                         self.user_input += char
                 
-                if self.cursor_pos < len(self.text) and self.user_input[self.cursor_pos] != self.text[self.cursor_pos]:
-                    self.errors += 1
-                
+                if self.cursor_pos < len(self.text):
+                    if self.user_input[self.cursor_pos] != self.text[self.cursor_pos]:
+                         self.errors += 1
+                    
                 self.cursor_pos += 1
                 self.total_chars_typed += 1
                 
@@ -404,15 +617,21 @@ class TypingApp:
             self.save_score()
 
     def save_score(self):
-        elapsed = (self.end_time - self.start_time) if (self.end_time and self.start_time) else 0
+        elapsed = self.end_time - self.start_time if self.end_time and self.start_time else 0
         wpm = int((len(self.user_input) / 5.0) / (elapsed / 60.0)) if elapsed > 0 else 0
+        acc = self.get_accuracy()
+        
         score_entry = {
             "date": time.strftime("%Y-%m-%d %H:%M"),
             "mode": self.mode,
+            "word_bank": self.word_bank,
+            "smart": self.smart_mode,
             "wpm": wpm,
-            "accuracy": self.get_accuracy(),
-            "errors": self.errors
+            "accuracy": acc,
+            "errors": self.errors,
+            "chars": len(self.user_input)
         }
+        
         scores = load_scores()
         scores.append(score_entry)
         scores.sort(key=lambda x: x['wpm'], reverse=True)
@@ -422,81 +641,90 @@ class TypingApp:
         scores = load_scores()
         self.stdscr.clear()
         h, w = self.stdscr.getmaxyx()
-        self.stdscr.addstr(2, max(0, (w-12)//2), " HIGH SCORES ", curses.color_pair(5) | curses.A_BOLD)
+        
+        title = " HIGH SCORES "
+        self.stdscr.addstr(2, (w-len(title))//2, title, curses.color_pair(5) | curses.A_BOLD)
+        
         if not scores:
             self.stdscr.addstr(5, 5, "No scores recorded yet.", curses.color_pair(4))
         else:
-            self.stdscr.addstr(4, 5, "Date       Mode   WPM  Acc%", curses.color_pair(5))
+            self.stdscr.addstr(4, 5, "Date       Mode    WPM  Acc%   Bank", curses.color_pair(5))
             for i, s in enumerate(scores[:15]):
-                line = f"{s['date']} {s['mode']:<6} {s['wpm']:>3} {s['accuracy']:>5.1f}"
-                try: self.stdscr.addstr(6 + i, 5, line, curses.color_pair(1 if i==0 else 4))
-                except curses.error: pass
+                bank = s.get('word_bank', 'N/A')
+                if s.get('smart'): bank += " (Smart)"
+                line = f"{s['date']} {s['mode']:<6} {s['wpm']:>3} {s['accuracy']:>5.1f}   {bank}"
+                try:
+                    self.stdscr.addstr(6 + i, 5, line, curses.color_pair(1 if i == 0 else 4))
+                except curses.error:
+                    pass
+        
         self.stdscr.addstr(h-2, 2, " Press Enter to close ", curses.color_pair(5) | curses.A_DIM)
         self.stdscr.refresh()
+        
         while True:
             k = self.stdscr.getch()
-            if k in (10, curses.KEY_ENTER, 13): break
+            if k == 10 or k == curses.KEY_ENTER:
+                break
 
     def run(self):
+        curses.curs_set(0)
+        self.stdscr.nodelay(True)
+        
         while self.running:
             self.draw_screen()
             try:
                 key = self.stdscr.getch()
-                if key != -1: self.handle_input(key)
+                if key != -1:
+                    self.handle_input(key)
             except KeyboardInterrupt:
                 break
+        
         curses.curs_set(1)
-
-def ensure_config():
-    if not os.path.exists(CONFIG_DIR): os.makedirs(CONFIG_DIR)
-    if not os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'w') as f: json.dump({"minimal_stats": False}, f)
-    if not os.path.exists(SCORES_FILE):
-        with open(SCORES_FILE, 'w') as f: json.dump([], f)
-
-def load_config():
-    try:
-        with open(CONFIG_FILE, 'r') as f: return json.load(f)
-    except: return {"minimal_stats": False}
-
-def save_config(config):
-    with open(CONFIG_FILE, 'w') as f: json.dump(config, f)
-
-def load_scores():
-    try:
-        with open(SCORES_FILE, 'r') as f: return json.load(f)
-    except: return []
-
-def save_scores(scores):
-    with open(SCORES_FILE, 'w') as f: json.dump(scores, f)
 
 def main_cli(stdscr, args):
     ensure_config()
+    
+    if args.command == 'secret':
+        show_secret_screen(stdscr)
+        return
+
     mode = args.mode
-    # Pass smart flag if needed, defaulting to False for now unless arg added
-    app = TypingApp(stdscr, mode, target_count=args.count, length_cat=args.length, word_bank=args.bank, smart=False)
+    word_bank = args.bank
+    target = args.count
+    
+    app = TypingApp(stdscr, mode, target_count=target, word_bank=word_bank)
     app.run()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Scribere Typing Tutor")
-    subparsers = parser.add_subparsers(dest='command')
-    start_parser = subparsers.add_parser('start')
-    start_parser.add_argument('mode', choices=['rand', 'quote', 'zen', 'custom'])
-    start_parser.add_argument('--count', '-c', type=int, default=25)
-    start_parser.add_argument('--length', '-l', choices=['short', 'medium', 'long', 'longest'])
-    start_parser.add_argument('--bank', '-b', choices=['common', 'complex'], default='common')
-    # Add --smart flag
-    start_parser.add_argument('--smart', action='store_true', help='Use smart sentence generation')
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
     
-    subparsers.add_parser('config')
+    start_parser = subparsers.add_parser('start', help='Start a typing test')
+    start_parser.add_argument('mode', choices=['rand', 'zen'], help='Test mode')
+    start_parser.add_argument('--count', '-c', type=int, default=25, help='Number of words')
+    start_parser.add_argument('--bank', '-b', choices=['common', 'complex'], default='common', help='Word bank')
+    
+    subparsers.add_parser('secret', help='Secret Easter Egg')
+    subparsers.add_parser('config', help='Show config path')
     
     args = parser.parse_args()
+    
     if args.command == 'config':
         print(f"Config: {CONFIG_FILE}")
         sys.exit(0)
-    elif not args.command:
-        parser.print_help()
+    elif args.command == 'secret':
+        curses.wrapper(lambda stdscr: main_cli(stdscr, args))
         sys.exit(0)
+    elif args.command == 'start':
+        pass
+    else:
+        # Default to rand-25 if no command
+        class DefaultArgs:
+            command = 'start'
+            mode = 'rand'
+            count = 25
+            bank = 'common'
+        args = DefaultArgs()
 
     try:
         curses.wrapper(lambda stdscr: main_cli(stdscr, args))
