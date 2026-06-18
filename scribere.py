@@ -36,7 +36,7 @@ SUBMENU_HEIGHT = 10
 EASTER_EGG_URL = "https://f4.bcbits.com/img/a1664460568_10.jpg"
 EASTER_EGG_TIMEOUT = 10
 
-# ASCII art gradient characters (from dark to light)
+# ASCII art gradient characters (from dark to light) - IMPROVED QUALITY
 ASCII_GRADIENT = "█▓▒░ "
 
 # Word count validation
@@ -181,12 +181,12 @@ def load_config() -> Dict[str, Any]:
     try:
         with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
+    except (FileNotFoundError, json.JSONDecodeError):
         return {
-            "word_bank": "common", 
-            "smart_sentences": False, 
-            "minimal_stats": False, 
-            "default_mode": "rand", 
+            "word_bank": "common",
+            "smart_sentences": False,
+            "minimal_stats": False,
+            "default_mode": "rand",
             "default_count": DEFAULT_WORD_COUNT
         }
 
@@ -362,7 +362,7 @@ class TypingApp:
         self.stdscr.erase()
         
         # Main Menu Box
-        menu_h, menu_w = 14, 60
+        menu_h, menu_w = MENU_HEIGHT, MENU_WIDTH
         start_y, start_x = (h - menu_h) // 2, (w - menu_w) // 2
         
         win = curses.newwin(menu_h, menu_w, start_y, start_x)
@@ -456,11 +456,11 @@ class TypingApp:
         if self.show_main_menu:
             self.draw_main_menu()
             return
-            
+        
         if self.show_menu:
             self.draw_submenu()
             return
-
+        
         self.stdscr.erase()
         height, width = self.stdscr.getmaxyx()
         
@@ -480,14 +480,14 @@ class TypingApp:
             self.stdscr.attroff(curses.color_pair(5))
         except curses.error:
             pass
-
+        
         title = " SCRIBERE "
         start_x = max(0, (width - len(title)) // 2)
         try:
             self.stdscr.addstr(0, start_x, title, curses.color_pair(5) | curses.A_BOLD)
         except curses.error:
             pass
-
+        
         status = f" Mode: {self.mode.upper()} | Words: {self.target_count} | Bank: {self.word_bank} "
         if self.finished:
             status = " TEST COMPLETE "
@@ -495,7 +495,7 @@ class TypingApp:
             self.stdscr.addstr(2, 2, status, curses.color_pair(5))
         except curses.error:
             pass
-
+        
         start_row = 4
         max_rows = height - 8
         max_cols = width - 4
@@ -558,7 +558,7 @@ class TypingApp:
                     pass
             
             global_flat_idx += len(line)
-
+        
         if self.finished:
             self.draw_results(start_row + max_rows + 1, width)
         else:
@@ -594,7 +594,7 @@ class TypingApp:
         key = win.getch()
         if key == ord('1'):
             self.show_menu = False
-        elif key == ord('2'): 
+        elif key == ord('2'):
             self.show_menu = False
             self.show_main_menu = True
         elif key == ord('3'):
@@ -636,7 +636,7 @@ class TypingApp:
             self.stdscr.addstr(row, max(0, (width - 9) // 2), " RESULTS ", curses.color_pair(5) | curses.A_BOLD)
         except curses.error:
             pass
-
+        
         minimal = self.config.get("minimal_stats", False)
         if minimal:
             stats = f" WPM: {wpm} | Accuracy: {acc:.1f}% "
@@ -653,7 +653,7 @@ class TypingApp:
         """Handle keyboard input for typing and navigation."""
         if self.show_main_menu or self.show_menu:
             return  # Handled in respective draw methods
-
+        
         if self.finished:
             if key in (10, curses.KEY_ENTER):
                 self.reset_test()
@@ -662,15 +662,15 @@ class TypingApp:
             elif key == 27:
                 self.show_menu = True
             return
-
+        
         if key == 27:
             self.show_menu = True
             return
-
+        
         if self.mode == 'zen' and key in (10, curses.KEY_ENTER, 343):
             self.finish_test()
             return
-
+        
         if key in (curses.KEY_BACKSPACE, 127, 8):
             if self.cursor_pos > 0:
                 self.cursor_pos -= 1
@@ -696,7 +696,7 @@ class TypingApp:
                 if self.cursor_pos < len(self.text):
                     if self.user_input[self.cursor_pos] != self.text[self.cursor_pos]:
                         self.errors += 1
-                    
+                
                 self.cursor_pos += 1
                 self.total_chars_typed += 1
                 
@@ -797,7 +797,7 @@ def main_cli(stdscr, args) -> None:
     if args.command == 'secret':
         show_secret_screen(stdscr)
         return
-
+    
     # If launched via CLI with args, skip main menu
     if args.command == 'start':
         # Validate count argument
@@ -812,9 +812,9 @@ def main_cli(stdscr, args) -> None:
         # Ensure default count is within bounds
         default_count = max(MIN_WORD_COUNT, min(MAX_WORD_COUNT, default_count))
         app = TypingApp(
-            stdscr, 
-            mode=config.get('default_mode', 'rand'), 
-            target_count=default_count, 
+            stdscr,
+            mode=config.get('default_mode', 'rand'),
+            target_count=default_count,
             word_bank=config.get('word_bank', 'common')
         )
         app.run()
@@ -844,7 +844,7 @@ if __name__ == "__main__":
         pass
     else:
         args.command = 'default'
-
+    
     try:
         curses.wrapper(lambda stdscr: main_cli(stdscr, args))
     except Exception as e:
